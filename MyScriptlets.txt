@@ -36,8 +36,8 @@ google.*##div.MjjYud:has-text(People also search for)
 ||bnc.lt^
 !-------------------------------------------
 ! Filter Reddit's Mobile Notices
-reddit.*##div.rpl-bottom-sheet:nth-of-type(5)
-reddit.com###xpromo-bottom-sheet
+! reddit.*##div.rpl-bottom-sheet
+! reddit.com###xpromo-bottom-sheet
 !------------------------------------------
 ! Turtlecute Test For 100%
 !pagead.js$domain=adblock.turtlecute.org
