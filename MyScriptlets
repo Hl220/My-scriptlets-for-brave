@@ -1,0 +1,55 @@
+[Adblock Plus 3.13]
+! Title: My Scriptlets For Brave
+! Description: Here Are Scriptlets i Use For Some Website That Are Too Big For Them To Fit In brave Scriplet.
+! Homepage: https://github.com/Hl220/My-scriptlets-for-brave/
+! Expires: 2 hours
+! Version: 1.0.0
+
+
+!-------------------------------------------
+! LibertyCity Ads Block Rule
+libertycity.*##div.banner_in_news
+!-------------------------------------------
+! Google AI Mode Block Rule
+google.*##.YzCcne:not([jscontroller])
+!-------------------------------------------
+! Google others Block Rule
+google.*##div.MjjYud:has-text(أسئلة أخرى)
+google.*##div.MjjYud:has-text(People also ask)
+google.*##div.MjjYud:has-text(تم البحث أيضًا عن)
+google.*##div.MjjYud:has-text(People also search for)
+!-------------------------------------------
+! Cuttlinks shortlinks Block Rule
+@@||vhit.io/scripts/vhit.js$script,domain=cuttlinks.com
+@@||cuttlinks.com$ghide
+!-------------------------------------------
+! Unblock Blocked Websites
+@@||dodi-repacks.*^
+@@||fitgirl-repacks.site^
+@@||maximoff.su^
+@@||vik1ngfile.site^
+||obfusgated.com^$badfilter
+||nextdns.io^$badfilter
+||blokada.org^$badfilter
+||quad9.net^$badfilter
+||greatis.com^
+||bnc.lt^
+!-------------------------------------------
+! Filter Reddit's Mobile Notices
+reddit.*##div.rpl-bottom-sheet:nth-of-type(5)
+reddit.com###xpromo-bottom-sheet
+!------------------------------------------
+! Turtlecute Test For 100%
+!pagead.js$domain=adblock.turtlecute.org
+!widget/ads.
+!-------------------------------------------
+||reddit.com^$removeparam=tl
+gamesradar.com##^script:has-text(html-load.com)
+gamesradar.com##+js(rmnt, script, html-load.com)
+!-------------------------------------------
+! Reddit Remove popup
+reddit.com##div.rpl-bottom-sheet
+! Reddit Unlock scrolling
+reddit.com##+js(rc, scroll-is-blocked, body, stay)
+reddit.com##+js(prevent-addEventListener, touchmove)
+!-------------------------------------------
