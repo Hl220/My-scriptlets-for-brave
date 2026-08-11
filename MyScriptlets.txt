@@ -31,6 +31,8 @@ google.*##div.MjjYud:has-text(/People also ask|People also search for|أسئلة
 ! html-load And error reports
 !gamesradar.com##^script:has-text(html-load.com)
 !gamesradar.com##+js(rmnt, script, html-load.com)
+scribd.com##+js(rmnt, script, /\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
+scribd.com##^script:has-text(/\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
 !-------------------------------------------
 ! Reddit Auto Translate
 ||reddit.com^$removeparam=tl
@@ -43,7 +45,6 @@ reddit.com##+js(prevent-addEventListener, touchmove)
 reddit.com###answers-suggested-queries
 reddit.com##.bg-neutral-background.border-solid.border-0.border-b-sm.border-neutral-border-weak.pt-xs
 !-------------------------------------------
-
 
 
 ! Specific For html-load And error reports
