@@ -33,6 +33,7 @@ google.*##div.MjjYud:has-text(/People also ask|People also search for|أسئلة
 !gamesradar.com##+js(rmnt, script, html-load.com)
 scribd.com##+js(rmnt, script, /\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
 scribd.com##^script:has-text(/\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
+scribd.com##^script[data-cfasync="false"][nowprocket]
 !-------------------------------------------
 ! Reddit Auto Translate
 ||reddit.com^$removeparam=tl
