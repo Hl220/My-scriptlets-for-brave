@@ -1,7 +1,8 @@
 /*
-  Standalone Element Picker — faithful port of uBlock Origin's picker logic,
-  now with a UI layout closer to the real uBO dialog: editable filter text,
-  side-by-side depth/specificity sliders, a drag handle, and dark mode.
+  Standalone Element Picker — faithful port of uBlock Origin's picker logic.
+  v5: Preview now actually hides matched elements (like real uBO), sliders
+  sit adjacent with a match-count badge, and the full candidate filter list
+  is shown below (like the "Cosmetic filters" list).
 */
 (function () {
   if (window.__epicker) { window.__epicker.disable(); return; }
@@ -9,7 +10,7 @@
   const state = {
     filters: [], elements: [], slot: 0, specIndex: 0, current: null,
     candidatesCache: new Map(), panel: null, handler: null, scrollHandler: null,
-    highlighted: [], manualText: null, dragging: false,
+    highlighted: [], manualText: null, dragging: false, previewing: false, previewHidden: [],
     theme: localStorage.getItem('epk-theme') ||
       (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   };
@@ -180,7 +181,7 @@
     return i === -1 ? text : text.slice(i + 2);
   }
 
-  // ---- highlight ----
+  // ---- highlight (red outline = "this is what will be removed") ----
   function clearMatchHighlights() {
     state.highlighted.forEach(el => {
       el.style.outline = el.__epkOldOutline || '';
@@ -195,11 +196,46 @@
     matches.forEach(el => {
       if (el === excludeEl) return;
       el.__epkOldOutline = el.style.outline;
-      el.style.outline = '2px dashed #f5a623';
+      el.style.outline = '2px solid #e6432c';
       el.style.outlineOffset = '-2px';
     });
     state.highlighted = Array.from(matches).filter(el => el !== excludeEl);
     return matches.length;
+  }
+
+  // ---- real Preview: actually hide matched elements, like uBO's filterToDOMInterface.preview() ----
+  function startPreview(sel) {
+    let matches;
+    try { matches = document.querySelectorAll(sel); } catch (e) { matches = []; }
+    state.previewHidden = Array.from(matches).map(el => ({ el, prev: el.style.getPropertyValue('display'), prio: el.style.getPropertyPriority('display') }));
+    state.previewHidden.forEach(o => o.el.style.setProperty('display', 'none', 'important'));
+    state.previewing = true;
+    clearMatchHighlights();
+    spotlight.style.display = 'none';
+    nameLabel.style.display = 'none';
+    panel.style.opacity = '0.12';
+    panel.style.pointerEvents = 'none';
+    document.addEventListener('click', endPreviewOnClick, true);
+  }
+  function endPreview() {
+    state.previewHidden.forEach(o => {
+      if (o.prev) o.el.style.setProperty('display', o.prev, o.prio);
+      else o.el.style.removeProperty('display');
+    });
+    state.previewHidden = [];
+    state.previewing = false;
+    panel.style.opacity = '1';
+    panel.style.pointerEvents = 'auto';
+    document.removeEventListener('click', endPreviewOnClick, true);
+    positionSpotlight();
+    const box = panel.querySelector('#epk-filter-text');
+    if (box) applyPreviewFromText(box.value);
+  }
+  function endPreviewOnClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    endPreview();
   }
 
   const spotlight = document.createElement('div');
@@ -217,6 +253,7 @@
   document.documentElement.appendChild(nameLabel);
 
   function positionSpotlight() {
+    if (state.previewing) return;
     const el = state.elements[state.slot] || state.current;
     if (!el) { spotlight.style.display = 'none'; nameLabel.style.display = 'none'; return; }
     const r = el.getBoundingClientRect();
@@ -252,9 +289,9 @@
   // ---- theme ----
   const THEMES = {
     light: { bg: '#fff', fg: '#222', sub: '#666', border: '#ddd', panelShadow: '0 4px 20px rgba(0,0,0,.2)',
-      chipBg: '#fff', chipBorder: '#ddd', codeBg: '#111', codeFg: '#0f0', trackBg: '#eee' },
+      chipBg: '#fff', chipBorder: '#ddd', codeBg: '#111', codeFg: '#0f0', trackBg: '#eee', badgeBg: '#eee' },
     dark: { bg: '#1e1f22', fg: '#e8e8e8', sub: '#9a9a9a', border: '#3a3b3e', panelShadow: '0 4px 24px rgba(0,0,0,.6)',
-      chipBg: '#2a2b2e', chipBorder: '#444', codeBg: '#000', codeFg: '#5cff5c', trackBg: '#333' },
+      chipBg: '#2a2b2e', chipBorder: '#444', codeBg: '#000', codeFg: '#5cff5c', trackBg: '#333', badgeBg: '#333' },
   };
   function theme() { return THEMES[state.theme]; }
 
@@ -263,7 +300,7 @@
   panel.style.cssText =
     'position:fixed;top:12px;right:12px;z-index:2147483647;border-radius:10px;padding:12px;' +
     'width:320px;max-height:85vh;overflow-y:auto;font-family:sans-serif;font-size:13px;' +
-    'border:1px solid;transition:background 150ms,color 150ms;';
+    'border:1px solid;transition:background 150ms,color 150ms,opacity 150ms;';
   document.body.appendChild(panel);
   state.panel = panel;
 
@@ -278,10 +315,11 @@
   }
 
   function applyPreviewFromText(text) {
+    if (state.previewing) return;
     const sel = selectorFromText(text);
     const n = sel ? applyMatchHighlights(sel, state.elements[state.slot]) : 0;
-    const cnt = panel.querySelector('#epk-count');
-    if (cnt) cnt.textContent = n + ' element' + (n === 1 ? '' : 's') + ' match';
+    const badge = panel.querySelector('#epk-badge');
+    if (badge) badge.textContent = n;
   }
 
   function applyPreview() {
@@ -300,7 +338,8 @@
     panel.style.cssText =
       'position:fixed;top:12px;right:12px;z-index:2147483647;border-radius:10px;padding:12px;' +
       'width:320px;max-height:85vh;overflow-y:auto;font-family:sans-serif;font-size:13px;' +
-      'border:1px solid;transition:background 150ms,color 150ms;' + themeCss(t);
+      'border:1px solid;transition:background 150ms,color 150ms,opacity 150ms;' + themeCss(t) +
+      (state.previewing ? 'opacity:0.12;pointer-events:none;' : '');
 
     const header =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
@@ -323,26 +362,22 @@
 
     html += '<textarea id="epk-filter-text" spellcheck="false" rows="2" style="width:100%;box-sizing:border-box;' +
       'font-family:monospace;font-size:12px;background:' + t.codeBg + ';color:' + t.codeFg + ';' +
-      'border:1px solid ' + t.border + ';border-radius:6px;padding:6px;resize:vertical;margin-bottom:6px;"></textarea>';
+      'border:1px solid ' + t.border + ';border-radius:6px;padding:6px;resize:vertical;margin-bottom:8px;"></textarea>';
 
-    html += '<div id="epk-count" style="font-size:11px;color:' + t.sub + ';margin-bottom:10px;"></div>';
-
-    html += '<div style="display:flex;gap:10px;margin-bottom:4px;">' +
-      '<div style="flex:1;"><div style="font-weight:600;font-size:11px;">Depth</div>' +
-      '<div style="font-size:10px;color:' + t.sub + ';">element \u2192 ancestor</div></div>' +
-      '<div style="flex:1;"><div style="font-weight:600;font-size:11px;">Specificity</div>' +
-      '<div style="font-size:10px;color:' + t.sub + ';">broad \u2192 narrow</div></div></div>';
-
-    html += '<div style="display:flex;gap:10px;margin-bottom:10px;">' +
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">' +
       '<input id="epk-depth" type="range" min="0" max="' + Math.max(0, state.filters.length - 1) +
-      '" value="' + state.slot + '" style="flex:1;">' +
+      '" value="' + state.slot + '" style="flex:1;margin:0;">' +
       '<input id="epk-spec" type="range" min="0" max="' + Math.max(0, currentCandidates().length - 1) +
-      '" value="' + state.specIndex + '" style="flex:1;"></div>';
+      '" value="' + state.specIndex + '" style="flex:1;margin:0;">' +
+      '<span id="epk-badge" style="min-width:22px;text-align:center;background:' + t.badgeBg + ';color:' + t.fg +
+      ';border-radius:4px;padding:3px 5px;font-size:11px;font-weight:600;">0</span></div>' +
+      '<div style="display:flex;font-size:10px;color:' + t.sub + ';margin:-6px 0 10px 0;">' +
+      '<div style="flex:1;">Depth: element \u2192 ancestor</div><div style="flex:1;">Specificity: broad \u2192 narrow</div></div>';
 
     html += '<div style="font-weight:600;margin-bottom:4px;font-size:12px;">Elements at this point</div>' +
       '<div id="epk-chain" style="display:flex;gap:4px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px;white-space:nowrap;"></div>';
 
-    html += '<div style="display:flex;align-items:stretch;gap:6px;">' +
+    html += '<div style="display:flex;align-items:stretch;gap:6px;margin-bottom:10px;">' +
       '<button id="epk-preview" style="flex:1;padding:8px 4px;background:' + t.chipBg + ';color:' + t.fg +
       ';border:1px solid ' + t.border + ';border-radius:6px;cursor:pointer;font-size:12px;">Preview</button>' +
       '<div id="epk-drag" title="Drag to move" style="flex:1.4;border-radius:6px;cursor:move;' +
@@ -356,19 +391,25 @@
       ';border:1px solid ' + t.border + ';border-radius:6px;cursor:pointer;font-size:12px;">Quit</button>' +
       '</div>';
 
+    html += '<div style="font-weight:600;margin-bottom:4px;font-size:12px;">Cosmetic filters</div>' +
+      '<div id="epk-list" style="display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto;"></div>';
+
     panel.innerHTML = html;
     panel.querySelector('#epk-close').addEventListener('click', disable);
     panel.querySelector('#epk-theme').addEventListener('click', toggleTheme);
     panel.querySelector('#epk-quit').addEventListener('click', disable);
     panel.querySelector('#epk-pick').addEventListener('click', () => {
+      if (state.previewing) endPreview();
       clearMatchHighlights();
       state.current = null;
       positionSpotlight();
       render();
     });
     panel.querySelector('#epk-preview').addEventListener('click', () => {
+      if (state.previewing) { endPreview(); return; }
       const box = panel.querySelector('#epk-filter-text');
-      applyPreviewFromText(box.value);
+      const sel = selectorFromText(box.value);
+      if (sel) startPreview(sel);
     });
     panel.querySelector('#epk-copy').addEventListener('click', (e) => {
       const box = panel.querySelector('#epk-filter-text');
@@ -393,6 +434,7 @@
     panel.querySelector('#epk-spec').addEventListener('input', (e) => {
       state.specIndex = +e.target.value;
       applyPreview();
+      renderList();
     });
 
     const filterBox = panel.querySelector('#epk-filter-text');
@@ -403,7 +445,33 @@
     });
 
     setupDrag(panel.querySelector('#epk-drag'));
+    renderList();
     applyPreviewFromText(filterBox.value);
+  }
+
+  function renderList() {
+    const t = theme();
+    const list = panel.querySelector('#epk-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const cands = currentCandidates();
+    cands.forEach((c, i) => {
+      const row = document.createElement('div');
+      const active = i === state.specIndex;
+      row.textContent = location.hostname + c.selector;
+      row.style.cssText = 'font-family:monospace;font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+        'border:1px dashed ' + (active ? '#e6432c' : 'transparent') + ';' +
+        'background:' + (active ? t.chipBg : 'transparent') + ';color:' + t.fg + ';';
+      row.addEventListener('click', () => {
+        state.specIndex = i;
+        applyPreview();
+        renderList();
+        const spec = panel.querySelector('#epk-spec');
+        if (spec) spec.value = i;
+      });
+      list.appendChild(row);
+    });
   }
 
   function toggleTheme() {
@@ -457,6 +525,7 @@
   }
 
   function select(el) {
+    if (state.previewing) endPreview();
     clearMatchHighlights();
     state.current = el;
     const built = filtersFrom(el);
@@ -472,7 +541,7 @@
 
   state.handler = function (e) {
     if (panel.contains(e.target)) return;
-    if (state.dragging) return;
+    if (state.dragging || state.previewing) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -486,6 +555,7 @@
   window.addEventListener('resize', state.scrollHandler, true);
 
   function disable() {
+    if (state.previewing) endPreview();
     clearMatchHighlights();
     document.removeEventListener('click', state.handler, true);
     window.removeEventListener('scroll', state.scrollHandler, true);
