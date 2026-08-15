@@ -1,11 +1,7 @@
 /*
   Standalone Element Picker (inspired by uBlock Origin's element picker)
-  No hiding/zapping — pure selector inspection tool.
-
-  Usage: tap an element -> see candidate CSS selectors (most specific to
-  most general) -> tap a candidate to preview matches highlighted on the
-  page -> tap Copy to copy the selector text -> Up/Down to walk to a
-  parent/child element and regenerate candidates for it.
+  No hiding/zapping — pure selector inspection tool, with a uBO-style
+  specificity slider and spotlight highlight.
 */
 (function () {
   if (window.__epicker) {
@@ -13,7 +9,16 @@
     return;
   }
 
-  const state = { current: null, stack: [], panel: null, handler: null, highlighted: [] };
+  const state = {
+    current: null,
+    stack: [],
+    panel: null,
+    handler: null,
+    scrollHandler: null,
+    highlighted: [],
+    candidates: [],
+    sliderIndex: 0,
+  };
   window.__epicker = state;
 
   // ---------- selector helpers ----------
@@ -54,63 +59,102 @@
     return null;
   }
 
-  function candidatesFor(el) {
+  function elementName(el) {
+    if (!el) return '';
+    let name = el.tagName.toLowerCase();
+    if (el.id) name += '#' + el.id;
+    else if (el.classList.length) name += '.' + Array.from(el.classList).slice(0, 2).join('.');
+    return name;
+  }
+
+  function rawCandidates(el) {
     const list = [];
     const tag = el.tagName.toLowerCase();
     const cls = classSelector(el);
 
-    if (el.id) list.push({ label: 'ID', value: '#' + CSS.escape(el.id) });
+    if (el.id) list.push('#' + CSS.escape(el.id));
     if (cls) {
-      list.push({ label: 'Tag + classes', value: tag + cls });
-      list.push({ label: 'Classes only', value: cls });
+      list.push(tag + cls);
+      list.push(cls);
     }
     const anc = nearestIdAncestor(el);
-    if (anc) {
-      list.push({ label: 'Inside #' + anc.id, value: '#' + CSS.escape(anc.id) + ' ' + tag + cls });
-    }
-    list.push({ label: 'Tag only', value: tag });
-    list.push({ label: 'Full path', value: fullPath(el) });
+    if (anc) list.push('#' + CSS.escape(anc.id) + ' ' + tag + cls);
+    list.push(tag);
+    list.push(fullPath(el));
 
-    const seen = new Set();
-    return list.filter(c => c.value && !seen.has(c.value) && seen.add(c.value));
+    return Array.from(new Set(list.filter(Boolean)));
   }
 
-  function ancestorChain(el) {
-    const chain = [];
-    let node = el, depth = 0;
-    while (node && node.tagName && node.tagName !== 'BODY' && node.tagName !== 'HTML' && depth < 10) {
-      chain.unshift(node);
-      node = node.parentElement;
-      depth++;
-    }
-    return chain;
+  // Build candidates ordered from narrowest (fewest matches) to broadest
+  // (most matches) — this is what the slider scrubs through, uBO-style.
+  function buildCandidates(el) {
+    const raw = rawCandidates(el);
+    const scored = raw.map(sel => {
+      let count = 0;
+      try { count = document.querySelectorAll(sel).length; } catch (e) { count = Infinity; }
+      return { value: sel, count };
+    }).filter(c => c.count > 0);
+    scored.sort((a, b) => a.count - b.count || a.value.length - b.value.length);
+    return scored;
   }
 
-  // ---------- highlight preview ----------
+  // ---------- highlight ----------
 
-  function clearHighlights() {
+  function clearMatchHighlights() {
     state.highlighted.forEach(el => {
       el.style.outline = el.__epickerOldOutline || '';
       el.style.outlineOffset = '';
+      el.style.background = el.__epickerOldBg || '';
     });
     state.highlighted = [];
   }
 
-  function previewSelector(sel) {
-    clearHighlights();
+  function applyMatchHighlights(sel, excludeEl) {
+    clearMatchHighlights();
     let matches;
-    try {
-      matches = document.querySelectorAll(sel);
-    } catch (e) {
-      return 0;
-    }
+    try { matches = document.querySelectorAll(sel); } catch (e) { return 0; }
     matches.forEach(el => {
+      if (el === excludeEl) return;
       el.__epickerOldOutline = el.style.outline;
-      el.style.outline = '2px solid #e6432c';
+      el.__epickerOldBg = el.style.background;
+      el.style.outline = '2px dashed #f5a623';
       el.style.outlineOffset = '-2px';
     });
-    state.highlighted = Array.from(matches);
+    state.highlighted = Array.from(matches).filter(el => el !== excludeEl);
     return matches.length;
+  }
+
+  // spotlight box + name label for the actively picked element
+  const spotlight = document.createElement('div');
+  spotlight.style.cssText =
+    'position:fixed;z-index:2147483646;pointer-events:none;' +
+    'border:2px solid #e6432c;border-radius:2px;' +
+    'box-shadow:0 0 0 9999px rgba(0,0,0,.45);' +
+    'transition:all 120ms ease;display:none;box-sizing:border-box;';
+  document.documentElement.appendChild(spotlight);
+
+  const nameLabel = document.createElement('div');
+  nameLabel.style.cssText =
+    'position:fixed;z-index:2147483647;pointer-events:none;' +
+    'background:#e6432c;color:#fff;font:12px/1.4 monospace;' +
+    'padding:2px 6px;border-radius:4px;display:none;white-space:nowrap;';
+  document.documentElement.appendChild(nameLabel);
+
+  function positionSpotlight() {
+    const el = state.current;
+    if (!el) { spotlight.style.display = 'none'; nameLabel.style.display = 'none'; return; }
+    const r = el.getBoundingClientRect();
+    spotlight.style.display = 'block';
+    spotlight.style.left = r.left + 'px';
+    spotlight.style.top = r.top + 'px';
+    spotlight.style.width = r.width + 'px';
+    spotlight.style.height = r.height + 'px';
+
+    nameLabel.style.display = 'block';
+    nameLabel.textContent = elementName(el);
+    const above = r.top > 22;
+    nameLabel.style.left = Math.max(0, r.left) + 'px';
+    nameLabel.style.top = (above ? r.top - 20 : r.bottom + 2) + 'px';
   }
 
   // ---------- clipboard ----------
@@ -144,6 +188,21 @@
   document.body.appendChild(panel);
   state.panel = panel;
 
+  function currentSelector() {
+    const c = state.candidates[state.sliderIndex];
+    return c ? c.value : '';
+  }
+
+  function applySliderPreview() {
+    const sel = currentSelector();
+    if (!sel) return;
+    const count = applyMatchHighlights(sel, state.current);
+    const disp = panel.querySelector('#epk-sel-text');
+    const cnt = panel.querySelector('#epk-count');
+    if (disp) disp.textContent = sel;
+    if (cnt) cnt.textContent = (count) + ' element' + (count === 1 ? '' : 's') + ' match this selector';
+  }
+
   function render() {
     const el = state.current;
     let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
@@ -158,27 +217,23 @@
     }
 
     html += '<div style="background:#f7f7f7;border-radius:6px;padding:8px;margin-bottom:8px;">' +
-      '<div><b>Tag:</b> ' + el.tagName.toLowerCase() + '</div>' +
-      (el.id ? '<div><b>ID:</b> ' + el.id + '</div>' : '') +
-      (el.className && typeof el.className === 'string' ? '<div><b>Classes:</b> ' + el.className + '</div>' : '') +
+      '<div style="font-family:monospace;font-weight:600;">' + elementName(el) + '</div>' +
       '</div>';
 
-    html += '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px;">' +
       '<button id="epk-up" style="flex:1;padding:6px;background:#eee;border:none;border-radius:6px;cursor:pointer;">\u2191 Parent</button>' +
       '<button id="epk-down" style="flex:1;padding:6px;background:#eee;border:none;border-radius:6px;cursor:pointer;" ' +
       (state.stack.length ? '' : 'disabled') + '>\u2193 Child</button></div>';
 
-    html += '<div style="font-weight:600;margin-bottom:4px;">Candidate selectors</div>';
-    const cands = candidatesFor(el);
-    cands.forEach((c, i) => {
-      html += '<div class="epk-cand" data-i="' + i + '" style="border:1px solid #eee;border-radius:6px;padding:6px;margin-bottom:6px;cursor:pointer;">' +
-        '<div style="font-size:11px;color:#888;">' + c.label + '</div>' +
-        '<div style="display:flex;align-items:center;gap:6px;">' +
-        '<code style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;">' + c.value.replace(/</g, '&lt;') + '</code>' +
-        '<button class="epk-copy" data-i="' + i + '" style="background:#e6432c;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;">Copy</button>' +
-        '</div><div class="epk-count" data-i="' + i + '" style="font-size:11px;color:#666;margin-top:2px;"></div>' +
-        '</div>';
-    });
+    html += '<div style="font-weight:600;margin-bottom:2px;">Specificity</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:4px;">Narrow \u2190\u2192 Broad</div>' +
+      '<input id="epk-slider" type="range" min="0" max="' + Math.max(0, state.candidates.length - 1) + '" ' +
+      'value="' + state.sliderIndex + '" style="width:100%;margin-bottom:6px;">' +
+      '<div id="epk-sel-text" style="font-family:monospace;font-size:12px;background:#111;color:#0f0;' +
+      'padding:6px;border-radius:6px;overflow-x:auto;white-space:nowrap;margin-bottom:4px;"></div>' +
+      '<div id="epk-count" style="font-size:11px;color:#666;margin-bottom:8px;"></div>' +
+      '<button id="epk-copy" style="width:100%;padding:8px;background:#e6432c;color:#fff;border:none;' +
+      'border-radius:6px;cursor:pointer;font-size:13px;">Copy Selector</button>';
 
     panel.innerHTML = html;
     panel.querySelector('#epk-close').addEventListener('click', disable);
@@ -186,29 +241,28 @@
     const downBtn = panel.querySelector('#epk-down');
     if (!downBtn.disabled) downBtn.addEventListener('click', goDown);
 
-    panel.querySelectorAll('.epk-cand').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.classList.contains('epk-copy')) return;
-        const i = +row.dataset.i;
-        const n = previewSelector(cands[i].value);
-        panel.querySelector('.epk-count[data-i="' + i + '"]').textContent = n + ' match' + (n === 1 ? '' : 'es') + ' highlighted on page';
-      });
+    const slider = panel.querySelector('#epk-slider');
+    slider.addEventListener('input', () => {
+      state.sliderIndex = +slider.value;
+      applySliderPreview();
     });
-    panel.querySelectorAll('.epk-copy').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const i = +btn.dataset.i;
-        copyText(cands[i].value);
-        btn.textContent = 'Copied!';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
-      });
+
+    panel.querySelector('#epk-copy').addEventListener('click', (e) => {
+      copyText(currentSelector());
+      e.target.textContent = 'Copied!';
+      setTimeout(() => { e.target.textContent = 'Copy Selector'; }, 1200);
     });
+
+    applySliderPreview();
   }
 
   function select(el) {
-    clearHighlights();
+    clearMatchHighlights();
     state.current = el;
     state.stack = [];
+    state.candidates = buildCandidates(el);
+    state.sliderIndex = 0;
+    positionSpotlight();
     render();
   }
 
@@ -216,14 +270,20 @@
     if (!state.current || !state.current.parentElement) return;
     state.stack.push(state.current);
     state.current = state.current.parentElement;
-    clearHighlights();
+    clearMatchHighlights();
+    state.candidates = buildCandidates(state.current);
+    state.sliderIndex = 0;
+    positionSpotlight();
     render();
   }
 
   function goDown() {
     if (!state.stack.length) return;
     state.current = state.stack.pop();
-    clearHighlights();
+    clearMatchHighlights();
+    state.candidates = buildCandidates(state.current);
+    state.sliderIndex = 0;
+    positionSpotlight();
     render();
   }
 
@@ -239,10 +299,18 @@
   };
   document.addEventListener('click', state.handler, true);
 
+  state.scrollHandler = function () { positionSpotlight(); };
+  window.addEventListener('scroll', state.scrollHandler, true);
+  window.addEventListener('resize', state.scrollHandler, true);
+
   function disable() {
-    clearHighlights();
+    clearMatchHighlights();
     document.removeEventListener('click', state.handler, true);
+    window.removeEventListener('scroll', state.scrollHandler, true);
+    window.removeEventListener('resize', state.scrollHandler, true);
     if (panel.parentNode) panel.remove();
+    spotlight.remove();
+    nameLabel.remove();
     delete window.__epicker;
   }
   state.disable = disable;
