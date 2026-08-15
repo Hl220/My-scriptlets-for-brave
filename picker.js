@@ -201,7 +201,10 @@
   position: fixed; inset: 0; z-index: 2147483647; cursor: crosshair;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: var(--font-size);
+  pointer-events: none;
+  direction: ltr; unicode-bidi: isolate; text-transform: none; letter-spacing: normal;
 }
+#ublock0-epicker * { direction: ltr; unicode-bidi: isolate; text-transform: none !important; }
 #ublock0-epicker.dark {
   --surface-1: rgb(27 27 35); --surface-2: rgb(47 47 59); --surface-3: rgb(69 69 85);
   --border-1: rgb(81 81 98); --border-2: rgb(93 93 110);
@@ -217,7 +220,9 @@
   cursor: default; display: flex; flex-direction: column;
   max-width: min(32rem, 100vw - 4px); min-width: min(24rem, 100vw - 4px);
   overflow-y: auto; position: fixed; width: min(32rem, 100vw - 4px);
+  max-height: calc(100vh - 4px); max-height: calc(100svh - 4px);
   color: var(--ink-1); border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  pointer-events: auto;
 }
 #ublock0-epicker aside > *:not(:first-child) { padding: 0 6px; }
 #ublock0-epicker #windowbar { display: flex; }
@@ -302,6 +307,11 @@
   // ---- root markup, ported from epicker-ui.html ----
   const root = document.createElement('div');
   root.id = 'ublock0-epicker';
+  root.lang = 'en';
+  root.dir = 'ltr';
+  root.translate = false;
+  root.setAttribute('translate', 'no');
+  root.classList.add('notranslate');
   if (state.theme === 'dark') root.classList.add('dark');
   root.innerHTML = `
 <aside style="right:2px;bottom:2px;">
@@ -346,6 +356,20 @@
 `;
   document.body.appendChild(root);
   state.root = root;
+
+  // Force the aside to stay fully within the current viewport on spawn
+  (function clampInitialPosition() {
+    const asideEl = root.querySelector('aside');
+    requestAnimationFrame(() => {
+      const r = asideEl.getBoundingClientRect();
+      if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) {
+        asideEl.style.right = 'auto';
+        asideEl.style.bottom = 'auto';
+        asideEl.style.left = Math.max(0, innerWidth - r.width - 2) + 'px';
+        asideEl.style.top = Math.max(0, innerHeight - r.height - 2) + 'px';
+      }
+    });
+  })();
 
   const aside = root.querySelector('aside');
   const filterBox = root.querySelector('#epk-filter-text');
@@ -569,8 +593,13 @@
     }
     function onMoveDrag(e) {
       const p = pointFrom(e);
-      aside.style.left = Math.max(0, startLeft + (p.x - startX)) + 'px';
-      aside.style.top = Math.max(0, startTop + (p.y - startY)) + 'px';
+      const w = aside.offsetWidth, h = aside.offsetHeight;
+      const maxLeft = Math.max(0, innerWidth - w);
+      const maxTop = Math.max(0, innerHeight - h);
+      const left = Math.min(maxLeft, Math.max(0, startLeft + (p.x - startX)));
+      const top = Math.min(maxTop, Math.max(0, startTop + (p.y - startY)));
+      aside.style.left = left + 'px';
+      aside.style.top = top + 'px';
       e.preventDefault();
     }
     function onUp() {
