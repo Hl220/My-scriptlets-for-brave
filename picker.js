@@ -228,8 +228,8 @@
 }
 #ublock0-epicker aside.compact > *:not(#windowbar) { display: none; }
 #ublock0-epicker aside.expanded {
-  left: 0; right: 0; bottom: 0; width: 100%; max-width: 100vw;
-  border-radius: 10px 10px 0 0; border-bottom: none;
+  left: 0; right: 0; bottom: 0; width: 100%; max-width: 100vw; box-sizing: border-box;
+  border-radius: 5px 5px 0 0; border-bottom: none;
   max-height: 75vh; max-height: 75svh;
 }
 #ublock0-epicker aside.expanded > *:not(:first-child) { padding-left: 10px; padding-right: 10px; }
@@ -243,16 +243,21 @@
   background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAECAYAAACtBE5DAAAAFElEQVQI12NgwAfKy8v/M5ANYLoBshgEyQo6H9UAAAAASUVORK5CYII=');
   cursor: grab; flex-grow: 1; opacity: 0.8; height: 2em;
 }
-#ublock0-epicker aside.expanded #windowbar #move { cursor: default; opacity: 0.4; }
 #ublock0-epicker aside.moving #windowbar #move { cursor: grabbing; }
 #ublock0-epicker #windowbar svg { fill: none; pointer-events: none; stroke: var(--ink-1); stroke-width: 3px; width: 100%; height: 100%; }
 #ublock0-epicker #windowbar #minimize svg > rect { display: none; }
 #ublock0-epicker aside.compact #windowbar #minimize svg > path { display: none; }
 #ublock0-epicker aside.compact #windowbar #minimize svg > rect { display: initial; }
-#ublock0-epicker #candidateFilters .collapsed > .changeFilter { display: none; }
-#ublock0-epicker #candidateFilters > li > span:first-child { cursor: pointer; display: block; padding: 4px 0; }
-#ublock0-epicker #candidateFilters > li > span:first-child::before { content: '\\25be\\00a0'; }
-#ublock0-epicker #candidateFilters .collapsed > span:first-child::before { content: '\\25b8\\00a0'; }
+#ublock0-epicker .epk-section-title { font-weight: 600; font-size: 12px; margin: 8px 0 4px; }
+#ublock0-epicker .epk-card-list { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; margin-bottom: 8px; }
+#ublock0-epicker .epk-card {
+  border: 1px solid var(--border-1); border-radius: 6px; padding: 6px 8px; cursor: pointer;
+  background: var(--surface-2); font: 12px/1.4 monospace; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; display: flex; justify-content: space-between; gap: 8px;
+}
+#ublock0-epicker .epk-card:hover { filter: brightness(0.95); }
+#ublock0-epicker .epk-card.active { border: 2px solid rgb(var(--blue-50)); background: var(--surface-3); }
+#ublock0-epicker .epk-card .epk-card-meta { font-size: smaller; color: gray; flex-shrink: 0; }
 #ublock0-epicker section { border: 0; box-sizing: border-box; display: inline-block; width: 100%; }
 #ublock0-epicker section > div:first-child { border: 1px solid var(--surface-3); margin: 0; position: relative; border-radius: 3px; }
 #ublock0-epicker section.invalidFilter > div:first-child { border-color: var(--error-surface); }
@@ -300,17 +305,7 @@
 #ublock0-epicker button[disabled] { background-color: var(--button-disabled-surface); opacity: .5; pointer-events: none; }
 #ublock0-epicker.preview #preview { background-color: var(--button-preferred-surface); color: var(--button-preferred-ink); }
 #ublock0-epicker ul { margin: 4px 0 0 0; padding: 0; list-style-type: none; text-align: left; overflow: hidden; }
-#ublock0-epicker #candidateFilters { max-height: min(16em, 20vh); overflow-y: auto; margin-bottom: 6px; }
-#ublock0-epicker #candidateFilters > li > span:first-child { font-weight: bold; font-size: 90%; }
-#ublock0-epicker #candidateFilters .changeFilter { list-style-type: none; margin: 2px 0 0 1em; overflow: hidden; text-align: left; }
-#ublock0-epicker #candidateFilters .changeFilter li {
-  border: 1px solid transparent; cursor: pointer; direction: ltr; font: 12px monospace; white-space: nowrap;
-  display: flex; justify-content: space-between; gap: 6px; padding: 1px 2px; border-radius: 2px;
-}
-#ublock0-epicker #candidateFilters .changeFilter li.active { border: 1px dotted rgb(var(--blue-50)); }
-#ublock0-epicker #candidateFilters .changeFilter li:hover { background-color: var(--surface-2); }
-#ublock0-epicker #candidateFilters .changeFilter li > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-#ublock0-epicker #candidateFilters .changeFilter li > span:nth-of-type(2) { font-size: smaller; color: gray; flex-shrink: 0; }
+
 #ublock0-epicker #windowbar #theme-toggle { background: none; border: none; cursor: pointer; font-size: 14px; min-height: unset; padding: 2px 6px; margin: 0; flex-shrink: 0; }
 #ublock0-epicker svg#sea { cursor: crosshair; box-sizing: border-box; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: none; }
 #ublock0-epicker svg#sea > path:first-child { fill: rgba(0,0,0,0.5); fill-rule: evenodd; }
@@ -365,12 +360,10 @@
       <button id="create" type="button" class="preferred">Create</button>
     </div>
   </section>
-  <ul id="candidateFilters">
-    <li id="cosmeticFilters" class="collapsed">
-      <span>Cosmetic filters</span>
-      <ul class="changeFilter"></ul>
-    </li>
-  </ul>
+  <div class="epk-section-title">Elements at this point</div>
+  <div id="epk-chain-list" class="epk-card-list"></div>
+  <div class="epk-section-title">Cosmetic filters</div>
+  <div id="epk-cand-list" class="epk-card-list"></div>
 </aside>
 <svg id="sea"><path d=""></path><path d=""></path></svg>
 `;
@@ -392,9 +385,6 @@
   })();
 
   const aside = root.querySelector('aside');
-  root.querySelector('#cosmeticFilters > span').addEventListener('click', () => {
-    root.querySelector('#cosmeticFilters').classList.toggle('collapsed');
-  });
   const filterBox = root.querySelector('#epk-filter-text');
   const seaPaths = root.querySelectorAll('#sea path');
   const section = root.querySelector('section');
@@ -505,29 +495,55 @@
   function currentCandidates() { return candidatesForSlot(state.slot); }
   function currentSelectorObj() {
     const c = currentCandidates();
-    return c[state.specIndex] || c[c.length - 1] || { selector: '', count: 0 };
+    return c[state.specIndex] || c[0] || { selector: '', count: 0 };
   }
+  function nameFor(filterStr) { return (filterStr || '').replace(/^##/, ''); }
 
   function renderCandidateList() {
-    const list = root.querySelector('#candidateFilters .changeFilter');
+    const list = root.querySelector('#epk-cand-list');
     list.innerHTML = '';
     const cands = currentCandidates();
     cands.forEach((c, i) => {
-      const li = document.createElement('li');
-      if (i === state.specIndex) li.classList.add('active');
+      const card = document.createElement('div');
+      card.className = 'epk-card' + (i === state.specIndex ? ' active' : '');
       const s1 = document.createElement('span');
       s1.textContent = c.selector;
+      s1.style.overflow = 'hidden';
+      s1.style.textOverflow = 'ellipsis';
       const s2 = document.createElement('span');
+      s2.className = 'epk-card-meta';
       s2.textContent = c.count + (c.count === 1 ? ' elem' : ' elems');
-      li.appendChild(s1);
-      li.appendChild(s2);
-      li.addEventListener('click', () => {
+      card.appendChild(s1);
+      card.appendChild(s2);
+      card.addEventListener('click', () => {
         state.specIndex = i;
         renderRange('resultsetSpecificity', i, false);
         applyCandidateToBox();
         renderCandidateList();
       });
-      list.appendChild(li);
+      list.appendChild(card);
+    });
+  }
+
+  // Every element in the clicked chain, top = the element you tapped,
+  // bottom = the outermost ancestor that holds the whole page.
+  function renderChainList() {
+    const list = root.querySelector('#epk-chain-list');
+    list.innerHTML = '';
+    state.filters.forEach((f, i) => {
+      const card = document.createElement('div');
+      card.className = 'epk-card' + (i === state.slot ? ' active' : '');
+      const s1 = document.createElement('span');
+      s1.textContent = nameFor(f);
+      s1.style.overflow = 'hidden';
+      s1.style.textOverflow = 'ellipsis';
+      const s2 = document.createElement('span');
+      s2.className = 'epk-card-meta';
+      s2.textContent = i === 0 ? 'clicked' : (i === state.filters.length - 1 ? 'page root' : 'ancestor');
+      card.appendChild(s1);
+      card.appendChild(s2);
+      card.addEventListener('click', () => setSlot(i));
+      list.appendChild(card);
     });
   }
 
@@ -552,7 +568,9 @@
   function setSlot(slot) {
     state.slot = Math.max(0, Math.min(state.filters.length - 1, slot));
     const cands = candidatesForSlot(state.slot);
-    state.specIndex = cands.length - 1;
+    // Default to the broadest match (index 0) so same-class siblings
+    // highlight automatically, without needing to touch the slider.
+    state.specIndex = 0;
     root.querySelector('#resultsetDepth input').max = String(Math.max(0, state.filters.length - 1));
     renderRange('resultsetDepth', state.slot, true);
     root.querySelector('#resultsetSpecificity input').max = String(Math.max(0, cands.length - 1));
@@ -560,6 +578,7 @@
     root.querySelector('#resultsetModifiers').classList.remove('hide');
     applyCandidateToBox();
     renderCandidateList();
+    renderChainList();
     updateSea();
   }
 
@@ -575,8 +594,17 @@
   }
 
   // ---- compact (small windowbar-only bar) vs expanded (full dialog) ----
+  function resetPosition() {
+    aside.style.left = '';
+    aside.style.right = '';
+    aside.style.top = '';
+    aside.style.bottom = '';
+  }
   function setExpanded(expanded) {
     state.expanded = expanded;
+    resetPosition(); // always start each mode fresh — a leftover position
+                      // from the other mode is what caused the sheet to
+                      // render off-screen / highlighting to clip too early
     aside.classList.toggle('expanded', expanded);
     aside.classList.toggle('compact', !expanded);
     updateSea();
@@ -593,7 +621,8 @@
     filterBox.value = '';
     countEl.textContent = '';
     section.classList.remove('invalidFilter');
-    root.querySelector('#candidateFilters .changeFilter').innerHTML = '';
+    root.querySelector('#epk-cand-list').innerHTML = '';
+    root.querySelector('#epk-chain-list').innerHTML = '';
     setExpanded(false); // drop to compact bar so the page is tappable again
   });
   root.querySelector('#preview').addEventListener('click', () => {
@@ -639,11 +668,14 @@
       return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY };
     }
     function onDown(e) {
-      if (state.expanded) return; // docked full-width sheet: dragging doesn't apply
       const p = pointFrom(e);
       const rect = aside.getBoundingClientRect();
       startX = p.x; startY = p.y; startLeft = rect.left; startTop = rect.top;
-      aside.style.right = 'auto'; aside.style.bottom = 'auto';
+      if (state.expanded) {
+        aside.style.bottom = 'auto'; // let top-based dragging take over from docked-bottom
+      } else {
+        aside.style.right = 'auto'; aside.style.bottom = 'auto';
+      }
       aside.classList.add('moving');
       state.dragging = true;
       document.addEventListener('mousemove', onMoveDrag, true);
@@ -654,13 +686,17 @@
     }
     function onMoveDrag(e) {
       const p = pointFrom(e);
-      const w = aside.offsetWidth, h = aside.offsetHeight;
-      const maxLeft = Math.max(0, innerWidth - w);
+      const h = aside.offsetHeight;
       const maxTop = Math.max(0, innerHeight - h);
-      const left = Math.min(maxLeft, Math.max(0, startLeft + (p.x - startX)));
       const top = Math.min(maxTop, Math.max(0, startTop + (p.y - startY)));
-      aside.style.left = left + 'px';
       aside.style.top = top + 'px';
+      if (!state.expanded) {
+        const w = aside.offsetWidth;
+        const maxLeft = Math.max(0, innerWidth - w);
+        const left = Math.min(maxLeft, Math.max(0, startLeft + (p.x - startX)));
+        aside.style.left = left + 'px';
+      }
+      updateSea(); // live-update the highlight clip as the sheet moves
       e.preventDefault();
     }
     function onUp() {
