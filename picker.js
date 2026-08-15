@@ -218,22 +218,41 @@
 #ublock0-epicker aside {
   background-color: var(--surface-1); border: 1px solid var(--border-2); box-sizing: border-box;
   cursor: default; display: flex; flex-direction: column;
-  max-width: min(32rem, 100vw - 4px); min-width: min(24rem, 100vw - 4px);
-  overflow-y: auto; position: fixed; width: min(32rem, 100vw - 4px);
-  max-height: calc(100vh - 4px); max-height: calc(100svh - 4px);
-  color: var(--ink-1); border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,.3);
-  pointer-events: auto;
+  overflow-y: auto; position: fixed;
+  color: var(--ink-1); box-shadow: 0 -4px 20px rgba(0,0,0,.3);
+  pointer-events: auto; transition: none;
 }
+#ublock0-epicker aside.compact {
+  right: 2px; bottom: 2px; width: auto; max-width: min(16rem, 100vw - 4px);
+  min-width: min(16rem, 100vw - 4px); border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,.3);
+}
+#ublock0-epicker aside.compact > *:not(#windowbar) { display: none; }
+#ublock0-epicker aside.expanded {
+  left: 0; right: 0; bottom: 0; width: 100%; max-width: 100vw;
+  border-radius: 10px 10px 0 0; border-bottom: none;
+  max-height: 75vh; max-height: 75svh;
+}
+#ublock0-epicker aside.expanded > *:not(:first-child) { padding-left: 10px; padding-right: 10px; }
 #ublock0-epicker aside > *:not(:first-child) { padding: 0 6px; }
 #ublock0-epicker #windowbar { display: flex; }
+#ublock0-epicker #windowbar #minimize,
+#ublock0-epicker #windowbar #quit { height: 2em; width: 2em; cursor: pointer; flex-shrink: 0; }
+#ublock0-epicker #windowbar #minimize:hover,
+#ublock0-epicker #windowbar #quit:hover { background-color: var(--surface-2); }
 #ublock0-epicker #windowbar #move {
   background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAECAYAAACtBE5DAAAAFElEQVQI12NgwAfKy8v/M5ANYLoBshgEyQo6H9UAAAAASUVORK5CYII=');
   cursor: grab; flex-grow: 1; opacity: 0.8; height: 2em;
 }
+#ublock0-epicker aside.expanded #windowbar #move { cursor: default; opacity: 0.4; }
 #ublock0-epicker aside.moving #windowbar #move { cursor: grabbing; }
-#ublock0-epicker #windowbar #quit { height: 2em; width: 2em; cursor: pointer; flex-shrink: 0; }
-#ublock0-epicker #windowbar #quit:hover { background-color: var(--surface-2); }
 #ublock0-epicker #windowbar svg { fill: none; pointer-events: none; stroke: var(--ink-1); stroke-width: 3px; width: 100%; height: 100%; }
+#ublock0-epicker #windowbar #minimize svg > rect { display: none; }
+#ublock0-epicker aside.compact #windowbar #minimize svg > path { display: none; }
+#ublock0-epicker aside.compact #windowbar #minimize svg > rect { display: initial; }
+#ublock0-epicker #candidateFilters .collapsed > .changeFilter { display: none; }
+#ublock0-epicker #candidateFilters > li > span:first-child { cursor: pointer; display: block; padding: 4px 0; }
+#ublock0-epicker #candidateFilters > li > span:first-child::before { content: '\\25be\\00a0'; }
+#ublock0-epicker #candidateFilters .collapsed > span:first-child::before { content: '\\25b8\\00a0'; }
 #ublock0-epicker section { border: 0; box-sizing: border-box; display: inline-block; width: 100%; }
 #ublock0-epicker section > div:first-child { border: 1px solid var(--surface-3); margin: 0; position: relative; border-radius: 3px; }
 #ublock0-epicker section.invalidFilter > div:first-child { border-color: var(--error-surface); }
@@ -292,7 +311,7 @@
 #ublock0-epicker #candidateFilters .changeFilter li:hover { background-color: var(--surface-2); }
 #ublock0-epicker #candidateFilters .changeFilter li > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 #ublock0-epicker #candidateFilters .changeFilter li > span:nth-of-type(2) { font-size: smaller; color: gray; flex-shrink: 0; }
-#ublock0-epicker #theme-toggle { position: absolute; top: 4px; right: 34px; background: none; border: none; cursor: pointer; font-size: 14px; min-height: unset; padding: 2px 4px; }
+#ublock0-epicker #windowbar #theme-toggle { background: none; border: none; cursor: pointer; font-size: 14px; min-height: unset; padding: 2px 6px; margin: 0; flex-shrink: 0; }
 #ublock0-epicker svg#sea { cursor: crosshair; box-sizing: border-box; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: none; }
 #ublock0-epicker svg#sea > path:first-child { fill: rgba(0,0,0,0.5); fill-rule: evenodd; }
 #ublock0-epicker svg#sea > path + path { stroke: #F00; stroke-width: 1px; fill: rgba(255,63,63,0.20); }
@@ -316,10 +335,11 @@
   root.innerHTML = `
 <aside style="right:2px;bottom:2px;">
   <div id="windowbar">
+    <div id="minimize" title="Minimize"><svg viewBox="0 0 64 64"><path d="M 16,48 H 48"/><rect x="16" y="16" height="32" width="32"/></svg></div>
     <div id="move"></div>
+    <button id="theme-toggle" title="Toggle dark mode">${state.theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19'}</button>
     <div id="quit" title="Quit"><svg viewBox="0 0 64 64"><path d="M16 16L48 48M16 48L48 16"/></svg></div>
   </div>
-  <button id="theme-toggle" title="Toggle dark mode">${state.theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19'}</button>
   <section>
     <div>
       <div class="codeMirrorContainer"><textarea id="epk-filter-text" spellcheck="false"></textarea></div>
@@ -346,7 +366,7 @@
     </div>
   </section>
   <ul id="candidateFilters">
-    <li id="cosmeticFilters">
+    <li id="cosmeticFilters" class="collapsed">
       <span>Cosmetic filters</span>
       <ul class="changeFilter"></ul>
     </li>
@@ -372,26 +392,55 @@
   })();
 
   const aside = root.querySelector('aside');
+  root.querySelector('#cosmeticFilters > span').addEventListener('click', () => {
+    root.querySelector('#cosmeticFilters').classList.toggle('collapsed');
+  });
   const filterBox = root.querySelector('#epk-filter-text');
   const seaPaths = root.querySelectorAll('#sea path');
   const section = root.querySelector('section');
   const createBtn = root.querySelector('#create');
   const countEl = root.querySelector('#resultsetCount');
 
-  // ---- sea (spotlight) — literally two overlapping SVG paths, evenodd cutout ----
+  // ---- sea (spotlight) — carves a hole for EVERY element that matches the
+  // current filter (not just the one you clicked), and never dims/highlights
+  // the area behind the expanded panel so highlights don't fight the UI ----
   function updateSea() {
-    const el = state.elements[state.slot] || state.current;
     const vw = innerWidth, vh = innerHeight;
-    if (!el) {
+    let clipBottom = vh;
+    if (aside.classList.contains('expanded')) {
+      clipBottom = aside.getBoundingClientRect().top;
+    }
+    if (clipBottom <= 0) {
       seaPaths[0].setAttribute('d', '');
       seaPaths[1].setAttribute('d', '');
       return;
     }
-    const r = el.getBoundingClientRect();
-    const hole = `M${r.left},${r.top} V${r.top + r.height} H${r.left + r.width} V${r.top} Z`;
-    const outer = `M0,0 H${vw} V${vh} H0 Z`;
-    seaPaths[0].setAttribute('d', outer + ' ' + hole);
-    seaPaths[1].setAttribute('d', hole);
+
+    let matches = [];
+    const sel = selectorFromText(filterBox.value);
+    if (sel) {
+      try { matches = Array.from(document.querySelectorAll(sel)); } catch (e) { matches = []; }
+    }
+    if (matches.length === 0 && state.current) matches = [state.current];
+
+    if (matches.length === 0) {
+      seaPaths[0].setAttribute('d', '');
+      seaPaths[1].setAttribute('d', '');
+      return;
+    }
+
+    let holes = '';
+    matches.forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      const top = Math.max(r.top, 0);
+      const bottom = Math.min(r.top + r.height, clipBottom);
+      if (bottom <= top) return;
+      holes += ` M${r.left},${top} V${bottom} H${r.left + r.width} V${top} Z`;
+    });
+    const outer = `M0,0 H${vw} V${clipBottom} H0 Z`;
+    seaPaths[0].setAttribute('d', outer + holes);
+    seaPaths[1].setAttribute('d', holes);
   }
 
   // ---- real Preview: hide matched elements, mirrors filterToDOMInterface.preview() ----
@@ -522,10 +571,21 @@
     state.elements = built.elements;
     state.candidatesCache = new Map();
     setSlot(0);
+    setExpanded(true); // auto-expand once something is actually picked
   }
+
+  // ---- compact (small windowbar-only bar) vs expanded (full dialog) ----
+  function setExpanded(expanded) {
+    state.expanded = expanded;
+    aside.classList.toggle('expanded', expanded);
+    aside.classList.toggle('compact', !expanded);
+    updateSea();
+  }
+  setExpanded(false); // start compact: just the pick/move/quit bar
 
   // ---- wiring ----
   root.querySelector('#quit').addEventListener('click', disable);
+  root.querySelector('#minimize').addEventListener('click', () => setExpanded(!state.expanded));
   root.querySelector('#pick').addEventListener('click', () => {
     if (state.previewing) endPreview();
     state.current = null;
@@ -534,7 +594,7 @@
     countEl.textContent = '';
     section.classList.remove('invalidFilter');
     root.querySelector('#candidateFilters .changeFilter').innerHTML = '';
-    updateSea();
+    setExpanded(false); // drop to compact bar so the page is tappable again
   });
   root.querySelector('#preview').addEventListener('click', () => {
     if (state.previewing) { endPreview(); return; }
@@ -579,6 +639,7 @@
       return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY };
     }
     function onDown(e) {
+      if (state.expanded) return; // docked full-width sheet: dragging doesn't apply
       const p = pointFrom(e);
       const rect = aside.getBoundingClientRect();
       startX = p.x; startY = p.y; startLeft = rect.left; startTop = rect.top;
