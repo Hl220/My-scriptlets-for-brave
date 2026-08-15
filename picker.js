@@ -1,27 +1,17 @@
 /*
-  Standalone Element Picker — faithful port of uBlock Origin's picker logic
-  (src/js/scriptlets/epicker.js + src/js/epicker-ui.js), adapted to run
-  standalone in any page without the extension.
-
-  - Depth slider: walks the ancestor chain from the clicked element up
-  - Specificity slider: the same 8-way specificity algorithm uBO uses,
-    from broadest match to narrowest
-  - Output is a real cosmetic filter: hostname##selector
+  Standalone Element Picker — faithful port of uBlock Origin's picker logic,
+  now with a UI layout closer to the real uBO dialog: editable filter text,
+  side-by-side depth/specificity sliders, a drag handle, and dark mode.
 */
 (function () {
   if (window.__epicker) { window.__epicker.disable(); return; }
 
   const state = {
-    filters: [],      // array of "##selector" strings, index 0 = clicked element
-    elements: [],      // parallel array of actual DOM elements
-    slot: 0,           // depth slider position (index into filters/elements)
-    specIndex: 0,       // specificity slider position
-    current: null,
-    candidatesCache: new Map(),
-    panel: null,
-    handler: null,
-    scrollHandler: null,
-    highlighted: [],
+    filters: [], elements: [], slot: 0, specIndex: 0, current: null,
+    candidatesCache: new Map(), panel: null, handler: null, scrollHandler: null,
+    highlighted: [], manualText: null, dragging: false,
+    theme: localStorage.getItem('epk-theme') ||
+      (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   };
   window.__epicker = state;
 
@@ -94,7 +84,6 @@
     return selector;
   }
 
-  // ---- ancestor chain from clicked element up to (not including) body ----
   function filtersFrom(first) {
     const filters = [];
     const elements = [];
@@ -114,7 +103,6 @@
     return { filters, elements };
   }
 
-  // ---- 8-way specificity path builder, ported from cosmeticCandidatesFromFilterChoice ----
   function pathsForSlot(slot, filters) {
     const specificities = [0b0000, 0b0010, 0b0011, 0b1000, 0b1010, 0b1100, 0b1110, 0b1111];
     const needBody = true;
@@ -159,7 +147,6 @@
     return candidates;
   }
 
-  // ---- optimize + sort candidates, ported from onOptimizeCandidates ----
   function optimizeCandidates(candidates) {
     const results = [];
     for (const paths of candidates) {
@@ -182,13 +169,16 @@
 
   function candidatesForSlot(slot) {
     if (state.candidatesCache.has(slot)) return state.candidatesCache.get(slot);
-    const raw = pathsForSlot(slot, state.filters);
-    const optimized = optimizeCandidates(raw);
+    const optimized = optimizeCandidates(pathsForSlot(slot, state.filters));
     state.candidatesCache.set(slot, optimized);
     return optimized;
   }
 
   function nameFor(filterStr) { return (filterStr || '').replace(/^##/, ''); }
+  function selectorFromText(text) {
+    const i = text.indexOf('##');
+    return i === -1 ? text : text.slice(i + 2);
+  }
 
   // ---- highlight ----
   function clearMatchHighlights() {
@@ -198,7 +188,6 @@
     });
     state.highlighted = [];
   }
-
   function applyMatchHighlights(sel, excludeEl) {
     clearMatchHighlights();
     let matches;
@@ -260,13 +249,21 @@
     ta.remove();
   }
 
-  // ---- panel ----
+  // ---- theme ----
+  const THEMES = {
+    light: { bg: '#fff', fg: '#222', sub: '#666', border: '#ddd', panelShadow: '0 4px 20px rgba(0,0,0,.2)',
+      chipBg: '#fff', chipBorder: '#ddd', codeBg: '#111', codeFg: '#0f0', trackBg: '#eee' },
+    dark: { bg: '#1e1f22', fg: '#e8e8e8', sub: '#9a9a9a', border: '#3a3b3e', panelShadow: '0 4px 24px rgba(0,0,0,.6)',
+      chipBg: '#2a2b2e', chipBorder: '#444', codeBg: '#000', codeFg: '#5cff5c', trackBg: '#333' },
+  };
+  function theme() { return THEMES[state.theme]; }
 
+  // ---- panel ----
   const panel = document.createElement('div');
   panel.style.cssText =
-    'position:fixed;top:12px;right:12px;z-index:2147483647;background:#fff;border:1px solid #ddd;' +
-    'border-radius:10px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,.2);width:300px;' +
-    'max-height:85vh;overflow-y:auto;font-family:sans-serif;color:#222;font-size:13px;';
+    'position:fixed;top:12px;right:12px;z-index:2147483647;border-radius:10px;padding:12px;' +
+    'width:320px;max-height:85vh;overflow-y:auto;font-family:sans-serif;font-size:13px;' +
+    'border:1px solid;transition:background 150ms,color 150ms;';
   document.body.appendChild(panel);
   state.panel = panel;
 
@@ -280,55 +277,105 @@
     return sel ? location.hostname + sel : '';
   }
 
-  function applyPreview() {
-    const obj = currentSelectorObj();
-    if (obj.selector) applyMatchHighlights(obj.selector.slice(2), state.elements[state.slot]);
-    const disp = panel.querySelector('#epk-sel-text');
+  function applyPreviewFromText(text) {
+    const sel = selectorFromText(text);
+    const n = sel ? applyMatchHighlights(sel, state.elements[state.slot]) : 0;
     const cnt = panel.querySelector('#epk-count');
-    if (disp) disp.textContent = fullFilterText();
-    if (cnt) cnt.textContent = obj.count + ' element' + (obj.count === 1 ? '' : 's') + ' match';
+    if (cnt) cnt.textContent = n + ' element' + (n === 1 ? '' : 's') + ' match';
+  }
+
+  function applyPreview() {
+    state.manualText = null;
+    const box = panel.querySelector('#epk-filter-text');
+    if (box) box.value = fullFilterText();
+    applyPreviewFromText(fullFilterText());
+  }
+
+  function themeCss(t) {
+    return 'background:' + t.bg + ';color:' + t.fg + ';border-color:' + t.border + ';box-shadow:' + t.panelShadow + ';';
   }
 
   function render() {
+    const t = theme();
+    panel.style.cssText =
+      'position:fixed;top:12px;right:12px;z-index:2147483647;border-radius:10px;padding:12px;' +
+      'width:320px;max-height:85vh;overflow-y:auto;font-family:sans-serif;font-size:13px;' +
+      'border:1px solid;transition:background 150ms,color 150ms;' + themeCss(t);
+
+    const header =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+      '<strong style="font-size:14px;">Element Picker</strong>' +
+      '<div style="display:flex;gap:4px;align-items:center;">' +
+      '<button id="epk-theme" title="Toggle dark mode" style="background:none;border:1px solid ' + t.border +
+      ';border-radius:6px;font-size:13px;cursor:pointer;color:' + t.fg + ';padding:2px 6px;">' +
+      (state.theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19') + '</button>' +
+      '<button id="epk-close" style="background:none;border:none;font-size:16px;cursor:pointer;color:' + t.sub + ';">\u2715</button>' +
+      '</div></div>';
+
     if (!state.current) {
-      panel.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-        '<strong style="font-size:14px;">Element Picker</strong>' +
-        '<button id="epk-close" style="background:none;border:none;font-size:16px;cursor:pointer;color:#888;">\u2715</button></div>' +
-        '<p style="color:#888;text-align:center;padding:12px 0;">Tap an element on the page to inspect it</p>';
+      panel.innerHTML = header + '<p style="color:' + t.sub + ';text-align:center;padding:12px 0;">Tap an element on the page to inspect it</p>';
       panel.querySelector('#epk-close').addEventListener('click', disable);
+      panel.querySelector('#epk-theme').addEventListener('click', toggleTheme);
       return;
     }
 
-    let html =
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-      '<strong style="font-size:14px;">Element Picker</strong>' +
-      '<button id="epk-close" style="background:none;border:none;font-size:16px;cursor:pointer;color:#888;">\u2715</button></div>';
+    let html = header;
 
-    html += '<div style="background:#f7f7f7;border-radius:6px;padding:8px;margin-bottom:8px;' +
-      'font-family:monospace;font-weight:600;word-break:break-all;">' + nameFor(state.filters[state.slot]) + '</div>';
+    html += '<textarea id="epk-filter-text" spellcheck="false" rows="2" style="width:100%;box-sizing:border-box;' +
+      'font-family:monospace;font-size:12px;background:' + t.codeBg + ';color:' + t.codeFg + ';' +
+      'border:1px solid ' + t.border + ';border-radius:6px;padding:6px;resize:vertical;margin-bottom:6px;"></textarea>';
 
-    html += '<div style="font-weight:600;margin-bottom:4px;">Elements at this point</div>' +
-      '<div id="epk-chain" style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;white-space:nowrap;"></div>';
+    html += '<div id="epk-count" style="font-size:11px;color:' + t.sub + ';margin-bottom:10px;"></div>';
 
-    html += '<div style="font-weight:600;margin-bottom:2px;">Depth</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:4px;">Clicked element \u2190\u2192 ancestor</div>' +
+    html += '<div style="display:flex;gap:10px;margin-bottom:4px;">' +
+      '<div style="flex:1;"><div style="font-weight:600;font-size:11px;">Depth</div>' +
+      '<div style="font-size:10px;color:' + t.sub + ';">element \u2192 ancestor</div></div>' +
+      '<div style="flex:1;"><div style="font-weight:600;font-size:11px;">Specificity</div>' +
+      '<div style="font-size:10px;color:' + t.sub + ';">broad \u2192 narrow</div></div></div>';
+
+    html += '<div style="display:flex;gap:10px;margin-bottom:10px;">' +
       '<input id="epk-depth" type="range" min="0" max="' + Math.max(0, state.filters.length - 1) +
-      '" value="' + state.slot + '" style="width:100%;margin-bottom:10px;">';
-
-    html += '<div style="font-weight:600;margin-bottom:2px;">Specificity</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:4px;">Broad \u2190\u2192 Narrow</div>' +
+      '" value="' + state.slot + '" style="flex:1;">' +
       '<input id="epk-spec" type="range" min="0" max="' + Math.max(0, currentCandidates().length - 1) +
-      '" value="' + state.specIndex + '" style="width:100%;margin-bottom:6px;">';
+      '" value="' + state.specIndex + '" style="flex:1;"></div>';
 
-    html += '<div id="epk-sel-text" style="font-family:monospace;font-size:12px;background:#111;color:#0f0;' +
-      'padding:6px;border-radius:6px;overflow-x:auto;white-space:nowrap;margin-bottom:4px;"></div>' +
-      '<div id="epk-count" style="font-size:11px;color:#666;margin-bottom:8px;"></div>' +
-      '<button id="epk-copy" style="width:100%;padding:8px;background:#e6432c;color:#fff;border:none;' +
-      'border-radius:6px;cursor:pointer;font-size:13px;">Copy Filter</button>';
+    html += '<div style="font-weight:600;margin-bottom:4px;font-size:12px;">Elements at this point</div>' +
+      '<div id="epk-chain" style="display:flex;gap:4px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px;white-space:nowrap;"></div>';
+
+    html += '<div style="display:flex;align-items:stretch;gap:6px;">' +
+      '<button id="epk-preview" style="flex:1;padding:8px 4px;background:' + t.chipBg + ';color:' + t.fg +
+      ';border:1px solid ' + t.border + ';border-radius:6px;cursor:pointer;font-size:12px;">Preview</button>' +
+      '<div id="epk-drag" title="Drag to move" style="flex:1.4;border-radius:6px;cursor:move;' +
+      'background:repeating-linear-gradient(45deg,' + t.trackBg + ',' + t.trackBg + ' 3px,transparent 3px,transparent 6px);' +
+      'display:flex;align-items:center;justify-content:center;color:' + t.sub + ';font-size:14px;">\u2725</div>' +
+      '<button id="epk-copy" style="flex:1;padding:8px 4px;background:#e6432c;color:#fff;border:none;' +
+      'border-radius:6px;cursor:pointer;font-size:12px;">Copy</button>' +
+      '<button id="epk-pick" style="flex:1;padding:8px 4px;background:' + t.chipBg + ';color:' + t.fg +
+      ';border:1px solid ' + t.border + ';border-radius:6px;cursor:pointer;font-size:12px;">Pick</button>' +
+      '<button id="epk-quit" style="flex:1;padding:8px 4px;background:' + t.chipBg + ';color:' + t.fg +
+      ';border:1px solid ' + t.border + ';border-radius:6px;cursor:pointer;font-size:12px;">Quit</button>' +
+      '</div>';
 
     panel.innerHTML = html;
     panel.querySelector('#epk-close').addEventListener('click', disable);
+    panel.querySelector('#epk-theme').addEventListener('click', toggleTheme);
+    panel.querySelector('#epk-quit').addEventListener('click', disable);
+    panel.querySelector('#epk-pick').addEventListener('click', () => {
+      clearMatchHighlights();
+      state.current = null;
+      positionSpotlight();
+      render();
+    });
+    panel.querySelector('#epk-preview').addEventListener('click', () => {
+      const box = panel.querySelector('#epk-filter-text');
+      applyPreviewFromText(box.value);
+    });
+    panel.querySelector('#epk-copy').addEventListener('click', (e) => {
+      const box = panel.querySelector('#epk-filter-text');
+      copyText(box.value);
+      e.target.textContent = 'Copied!';
+      setTimeout(() => { e.target.textContent = 'Copy'; }, 1200);
+    });
 
     const chain = panel.querySelector('#epk-chain');
     state.filters.forEach((f, i) => {
@@ -336,28 +383,69 @@
       chip.textContent = nameFor(f).slice(0, 20);
       const active = i === state.slot;
       chip.style.cssText = 'flex:0 0 auto;padding:4px 8px;border-radius:12px;border:1px solid ' +
-        (active ? '#e6432c' : '#ddd') + ';background:' + (active ? '#e6432c' : '#fff') +
-        ';color:' + (active ? '#fff' : '#333') + ';font-size:11px;cursor:pointer;';
+        (active ? '#e6432c' : t.chipBorder) + ';background:' + (active ? '#e6432c' : t.chipBg) +
+        ';color:' + (active ? '#fff' : t.fg) + ';font-size:11px;cursor:pointer;';
       chip.addEventListener('click', () => setSlot(i));
       chain.appendChild(chip);
     });
 
-    const depth = panel.querySelector('#epk-depth');
-    depth.addEventListener('input', () => setSlot(+depth.value));
-
-    const spec = panel.querySelector('#epk-spec');
-    spec.addEventListener('input', () => {
-      state.specIndex = +spec.value;
+    panel.querySelector('#epk-depth').addEventListener('input', (e) => setSlot(+e.target.value));
+    panel.querySelector('#epk-spec').addEventListener('input', (e) => {
+      state.specIndex = +e.target.value;
       applyPreview();
     });
 
-    panel.querySelector('#epk-copy').addEventListener('click', (e) => {
-      copyText(fullFilterText());
-      e.target.textContent = 'Copied!';
-      setTimeout(() => { e.target.textContent = 'Copy Filter'; }, 1200);
+    const filterBox = panel.querySelector('#epk-filter-text');
+    filterBox.value = fullFilterText();
+    filterBox.addEventListener('input', () => {
+      state.manualText = filterBox.value;
+      applyPreviewFromText(filterBox.value);
     });
 
-    applyPreview();
+    setupDrag(panel.querySelector('#epk-drag'));
+    applyPreviewFromText(filterBox.value);
+  }
+
+  function toggleTheme() {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('epk-theme', state.theme);
+    render();
+  }
+
+  function setupDrag(handle) {
+    let startX, startY, startLeft, startTop;
+    function pointFrom(e) {
+      return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY };
+    }
+    function onDown(e) {
+      const p = pointFrom(e);
+      const rect = panel.getBoundingClientRect();
+      startX = p.x; startY = p.y; startLeft = rect.left; startTop = rect.top;
+      panel.style.right = 'auto';
+      state.dragging = true;
+      document.addEventListener('mousemove', onMoveDrag, true);
+      document.addEventListener('touchmove', onMoveDrag, true);
+      document.addEventListener('mouseup', onUp, true);
+      document.addEventListener('touchend', onUp, true);
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    function onMoveDrag(e) {
+      const p = pointFrom(e);
+      const dx = p.x - startX, dy = p.y - startY;
+      panel.style.left = Math.max(0, startLeft + dx) + 'px';
+      panel.style.top = Math.max(0, startTop + dy) + 'px';
+      e.preventDefault();
+    }
+    function onUp() {
+      state.dragging = false;
+      document.removeEventListener('mousemove', onMoveDrag, true);
+      document.removeEventListener('touchmove', onMoveDrag, true);
+      document.removeEventListener('mouseup', onUp, true);
+      document.removeEventListener('touchend', onUp, true);
+    }
+    handle.addEventListener('mousedown', onDown);
+    handle.addEventListener('touchstart', onDown, { passive: false });
   }
 
   function setSlot(i) {
@@ -384,6 +472,7 @@
 
   state.handler = function (e) {
     if (panel.contains(e.target)) return;
+    if (state.dragging) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
