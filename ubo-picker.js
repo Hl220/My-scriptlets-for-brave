@@ -625,12 +625,38 @@ const filtersFrom = function(x, y) {
    elementFromPoint helpers.
    uBO's iframe made itself briefly non-hit-testable ("clickblind") so
    that document.elementFromPoint(x,y) would see through it to the real
-   page element. We do the same trick to our svg#sea overlay.
+   page element. We need to do the same to our ENTIRE shadow host (the
+   svg overlay *and* the dialog) — Document#elementFromPoint does not
+   pierce shadow boundaries, so without this, hovering anywhere near our
+   own dialog resolves to our own host element instead of falling
+   through to the page, which is both the "picker detects itself" bug
+   and the "dead zone near the dialog" bug: same root cause.
+
+   We also recurse into any OPEN shadow root the page itself uses (Web
+   Components), since a plain elementFromPoint call can't see past those
+   either and would otherwise only ever return the outer custom-element
+   tag for anything rendered inside one.
 --------------------------------------------------------------------- */
 const withPickerBlind = function(fn) {
-    const prev = svgRoot.style.pointerEvents;
+    const prevSvg = svgRoot.style.pointerEvents;
+    const prevDialog = dialog.style.pointerEvents;
     svgRoot.style.pointerEvents = 'none';
-    try { return fn(); } finally { svgRoot.style.pointerEvents = prev; }
+    dialog.style.pointerEvents = 'none';
+    try { return fn(); }
+    finally {
+        svgRoot.style.pointerEvents = prevSvg;
+        dialog.style.pointerEvents = prevDialog;
+    }
+};
+
+const deepElementFromPoint = function(x, y) {
+    let elem = document.elementFromPoint(x, y);
+    while (elem !== null && elem !== hostEl && elem.shadowRoot instanceof ShadowRoot) {
+        const inner = elem.shadowRoot.elementFromPoint(x, y);
+        if (inner === null || inner === elem) break;
+        elem = inner;
+    }
+    return elem;
 };
 
 const elementFromPoint = (function() {
@@ -639,8 +665,9 @@ const elementFromPoint = (function() {
         if (x !== undefined) { lastX = x; lastY = y; }
         else if (lastX !== undefined) { x = lastX; y = lastY; }
         else return null;
-        let elem = withPickerBlind(() => document.elementFromPoint(x, y));
-        if (elem === null || elem === document.body || elem === document.documentElement) {
+        let elem = withPickerBlind(() => deepElementFromPoint(x, y));
+        if (elem === null || elem === hostEl ||
+            elem === document.body || elem === document.documentElement) {
             elem = null;
         }
         return elem;
@@ -648,7 +675,8 @@ const elementFromPoint = (function() {
 })();
 
 const elementsFromPointBlind = function(x, y) {
-    return withPickerBlind(() => document.elementsFromPoint(x, y));
+    const elems = withPickerBlind(() => document.elementsFromPoint(x, y));
+    return elems.filter(elem => elem !== hostEl);
 };
 
 const highlightElementAtPoint = function(mx, my) {
