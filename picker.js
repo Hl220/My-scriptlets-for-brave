@@ -166,10 +166,8 @@
       if (selector === '') continue;
       results.push({ selector: '##' + selector, count });
     }
-    const seen = new Set();
-    const uniq = results.filter(r => !seen.has(r.selector) && seen.add(r.selector));
-    uniq.sort((a, b) => (b.count - a.count) || (a.selector.length - b.selector.length));
-    return uniq;
+    results.sort((a, b) => (b.count - a.count) || (a.selector.length - b.selector.length));
+    return results;
   }
 
   function candidatesForSlot(slot) {
@@ -249,15 +247,17 @@
 #ublock0-epicker aside.compact #windowbar #minimize svg > path { display: none; }
 #ublock0-epicker aside.compact #windowbar #minimize svg > rect { display: initial; }
 #ublock0-epicker .epk-section-title { font-weight: 600; font-size: 12px; margin: 8px 0 4px; }
-#ublock0-epicker .epk-card-list { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; margin-bottom: 8px; }
-#ublock0-epicker .epk-card {
-  border: 1px solid var(--border-1); border-radius: 6px; padding: 6px 8px; cursor: pointer;
-  background: var(--surface-2); font: 12px/1.4 monospace; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; display: flex; justify-content: space-between; gap: 8px;
+#ublock0-epicker .epk-list { list-style-type: none; margin: 0 0 8px 0; padding: 0; overflow-x: hidden; text-align: left; }
+#ublock0-epicker .epk-list.epk-scroll { overflow-y: auto; }
+#ublock0-epicker .epk-list > li {
+  border: 1px solid transparent; cursor: pointer; direction: ltr; font: 12px monospace; white-space: nowrap;
+  display: flex; justify-content: space-between; gap: 6px; padding: 2px 3px; border-radius: 2px;
+  overflow: hidden; text-overflow: ellipsis;
 }
-#ublock0-epicker .epk-card:hover { filter: brightness(0.95); }
-#ublock0-epicker .epk-card.active { border: 2px solid rgb(var(--blue-50)); background: var(--surface-3); }
-#ublock0-epicker .epk-card .epk-card-meta { font-size: smaller; color: gray; flex-shrink: 0; }
+#ublock0-epicker .epk-list > li.active { border: 1px dotted rgb(var(--blue-50)); }
+#ublock0-epicker .epk-list > li:hover { background-color: var(--surface-2); }
+#ublock0-epicker .epk-list > li > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+#ublock0-epicker .epk-list > li > span:nth-of-type(2) { font-size: smaller; color: gray; flex-shrink: 0; }
 #ublock0-epicker section { border: 0; box-sizing: border-box; display: inline-block; width: 100%; }
 #ublock0-epicker section > div:first-child { border: 1px solid var(--surface-3); margin: 0; position: relative; border-radius: 3px; }
 #ublock0-epicker section.invalidFilter > div:first-child { border-color: var(--error-surface); }
@@ -361,9 +361,9 @@
     </div>
   </section>
   <div class="epk-section-title">Elements at this point</div>
-  <div id="epk-chain-list" class="epk-card-list"></div>
+  <ul id="epk-chain-list" class="epk-list"></ul>
   <div class="epk-section-title">Cosmetic filters</div>
-  <div id="epk-cand-list" class="epk-card-list"></div>
+  <ul id="epk-cand-list" class="epk-list"></ul>
 </aside>
 <svg id="sea"><path d=""></path><path d=""></path></svg>
 `;
@@ -391,20 +391,18 @@
   const createBtn = root.querySelector('#create');
   const countEl = root.querySelector('#resultsetCount');
 
+  function rectsOverlap(a, b) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+  }
+
   // ---- sea (spotlight) — carves a hole for EVERY element that matches the
-  // current filter (not just the one you clicked), and never dims/highlights
-  // the area behind the expanded panel so highlights don't fight the UI ----
+  // current filter (not just the one you clicked). Highlighting covers the
+  // WHOLE page; we only skip an individual element if it's actually behind
+  // the panel right now (checked by real rect overlap), so dragging the
+  // panel around never blanks out highlighting elsewhere on the page. ----
   function updateSea() {
     const vw = innerWidth, vh = innerHeight;
-    let clipBottom = vh;
-    if (aside.classList.contains('expanded')) {
-      clipBottom = aside.getBoundingClientRect().top;
-    }
-    if (clipBottom <= 0) {
-      seaPaths[0].setAttribute('d', '');
-      seaPaths[1].setAttribute('d', '');
-      return;
-    }
+    const panelRect = aside.getBoundingClientRect();
 
     let matches = [];
     const sel = selectorFromText(filterBox.value);
@@ -423,12 +421,10 @@
     matches.forEach(el => {
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) return;
-      const top = Math.max(r.top, 0);
-      const bottom = Math.min(r.top + r.height, clipBottom);
-      if (bottom <= top) return;
-      holes += ` M${r.left},${top} V${bottom} H${r.left + r.width} V${top} Z`;
+      if (rectsOverlap(r, panelRect)) return; // hidden behind the dialog right now
+      holes += ` M${r.left},${r.top} V${r.top + r.height} H${r.left + r.width} V${r.top} Z`;
     });
-    const outer = `M0,0 H${vw} V${clipBottom} H0 Z`;
+    const outer = `M0,0 H${vw} V${vh} H0 Z`;
     seaPaths[0].setAttribute('d', outer + holes);
     seaPaths[1].setAttribute('d', holes);
   }
@@ -499,30 +495,40 @@
   }
   function nameFor(filterStr) { return (filterStr || '').replace(/^##/, ''); }
 
+  // Cap list height (with scroll) only once there are more than 5 items;
+  // otherwise let it size naturally to its content.
+  function applySmartSize(list, count) {
+    if (count > 5) {
+      list.classList.add('epk-scroll');
+      list.style.maxHeight = '11em'; // roughly 5 rows at this font size
+    } else {
+      list.classList.remove('epk-scroll');
+      list.style.maxHeight = '';
+    }
+  }
+
   function renderCandidateList() {
     const list = root.querySelector('#epk-cand-list');
     list.innerHTML = '';
     const cands = currentCandidates();
     cands.forEach((c, i) => {
-      const card = document.createElement('div');
-      card.className = 'epk-card' + (i === state.specIndex ? ' active' : '');
+      const li = document.createElement('li');
+      if (i === state.specIndex) li.classList.add('active');
       const s1 = document.createElement('span');
       s1.textContent = c.selector;
-      s1.style.overflow = 'hidden';
-      s1.style.textOverflow = 'ellipsis';
       const s2 = document.createElement('span');
-      s2.className = 'epk-card-meta';
       s2.textContent = c.count + (c.count === 1 ? ' elem' : ' elems');
-      card.appendChild(s1);
-      card.appendChild(s2);
-      card.addEventListener('click', () => {
+      li.appendChild(s1);
+      li.appendChild(s2);
+      li.addEventListener('click', () => {
         state.specIndex = i;
         renderRange('resultsetSpecificity', i, false);
         applyCandidateToBox();
         renderCandidateList();
       });
-      list.appendChild(card);
+      list.appendChild(li);
     });
+    applySmartSize(list, cands.length);
   }
 
   // Every element in the clicked chain, top = the element you tapped,
@@ -531,20 +537,18 @@
     const list = root.querySelector('#epk-chain-list');
     list.innerHTML = '';
     state.filters.forEach((f, i) => {
-      const card = document.createElement('div');
-      card.className = 'epk-card' + (i === state.slot ? ' active' : '');
+      const li = document.createElement('li');
+      if (i === state.slot) li.classList.add('active');
       const s1 = document.createElement('span');
       s1.textContent = nameFor(f);
-      s1.style.overflow = 'hidden';
-      s1.style.textOverflow = 'ellipsis';
       const s2 = document.createElement('span');
-      s2.className = 'epk-card-meta';
       s2.textContent = i === 0 ? 'clicked' : (i === state.filters.length - 1 ? 'page root' : 'ancestor');
-      card.appendChild(s1);
-      card.appendChild(s2);
-      card.addEventListener('click', () => setSlot(i));
-      list.appendChild(card);
+      li.appendChild(s1);
+      li.appendChild(s2);
+      li.addEventListener('click', () => setSlot(i));
+      list.appendChild(li);
     });
+    applySmartSize(list, state.filters.length);
   }
 
   function applyCandidateToBox() {
@@ -568,9 +572,14 @@
   function setSlot(slot) {
     state.slot = Math.max(0, Math.min(state.filters.length - 1, slot));
     const cands = candidatesForSlot(state.slot);
-    // Default to the broadest match (index 0) so same-class siblings
-    // highlight automatically, without needing to touch the slider.
-    state.specIndex = 0;
+    // Real uBO's own default is hardcoded to index 6 of the 8 specificity
+    // patterns (see epicker-ui.html: resultsetSpecificity value="6") — not
+    // the broadest match. That pattern keeps the full ancestor chain AND
+    // full class list, only dropping id/nth-of-type, so it groups elements
+    // that are genuinely structurally identical rather than just sharing
+    // one leaf class (which is what caused visually-different elements,
+    // e.g. different widths, to get lumped together).
+    state.specIndex = Math.min(6, cands.length - 1);
     root.querySelector('#resultsetDepth input').max = String(Math.max(0, state.filters.length - 1));
     renderRange('resultsetDepth', state.slot, true);
     root.querySelector('#resultsetSpecificity input').max = String(Math.max(0, cands.length - 1));
