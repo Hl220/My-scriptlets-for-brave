@@ -1125,7 +1125,7 @@ const onSvgTouch = (function() {
         const distance = Math.sqrt((stopX - startX) ** 2 + (stopY - startY) ** 2);
         const duration = ev.timeStamp - t0;
         if (distance < 32 && duration < 200) {
-            onSvgClicked({ clientX: ev.changedTouches[0].pageX, clientY: ev.changedTouches[0].pageY });
+            onSvgClicked({ clientX: ev.changedTouches[0].clientX, clientY: ev.changedTouches[0].clientY });
             ev.preventDefault();
             return;
         }
