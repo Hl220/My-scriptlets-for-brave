@@ -143,6 +143,7 @@ aside > *:not(:first-child) { padding: 0 6px 6px; }
     flex-grow: 1;
     min-height: 2em;
     opacity: .8;
+    touch-action: none;
 }
 aside.moving #move { cursor: grabbing; }
 #quit, #minimize {
@@ -262,7 +263,7 @@ ul { margin: 6px 0 0; padding: 0; list-style-type: none; text-align: left; overf
 #candidateFilters .changeFilter li.active { border: 1px dotted rgb(0 96 223); }
 #candidateFilters .changeFilter li:hover { background-color: var(--surface-2); }
 
-svg#sea { cursor: crosshair; box-sizing: border-box; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: auto; }
+svg#sea { cursor: crosshair; box-sizing: border-box; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: auto; touch-action: none; }
 :host(.paused) svg#sea { cursor: not-allowed; }
 svg#sea > path:first-child { fill: rgba(0,0,0,.5); fill-rule: evenodd; }
 svg#sea > path + path { stroke: #f00; stroke-width: .5px; fill: rgba(255,63,63,.20); }
@@ -1108,32 +1109,38 @@ const onSvgClicked = function(ev) {
     filterElementAtPoint(ev.clientX, ev.clientY);
 };
 
-// Swipe right: quit / hide dialog. Swipe left: reveal dialog.
+// Tap: pick/select. Swipe right: quit. Distance-based (not duration-based)
+// so a firm/held tap still counts as a tap — and we claim the whole
+// gesture ourselves (touch-action:none + preventDefault on both ends) so
+// Android's native scroll/selection gesture recognizer never competes
+// with us mid-touch, which is what caused inconsistent/"random" picks.
 const onSvgTouch = (function() {
-    let startX = 0, startY = 0, t0 = 0;
+    let startX = 0, startY = 0, tracking = false;
     return ev => {
         if (ev.type === 'touchstart') {
+            if (ev.touches.length !== 1) { tracking = false; return; }
             startX = ev.touches[0].screenX;
             startY = ev.touches[0].screenY;
-            t0 = ev.timeStamp;
-            return;
-        }
-        if (startX === undefined) return;
-        const stopX = ev.changedTouches[0].screenX;
-        const stopY = ev.changedTouches[0].screenY;
-        const angle = Math.abs(Math.atan2(stopY - startY, stopX - startX));
-        const distance = Math.sqrt((stopX - startX) ** 2 + (stopY - startY) ** 2);
-        const duration = ev.timeStamp - t0;
-        if (distance < 32 && duration < 200) {
-            onSvgClicked({ clientX: ev.changedTouches[0].clientX, clientY: ev.changedTouches[0].clientY });
+            tracking = true;
             ev.preventDefault();
             return;
         }
+        if (ev.type === 'touchcancel') { tracking = false; return; }
+        if (tracking === false) return;
+        tracking = false;
+        ev.preventDefault();
+        const t = ev.changedTouches[0];
+        const stopX = t.screenX, stopY = t.screenY;
+        const distance = Math.hypot(stopX - startX, stopY - startY);
+        if (distance < 24) {
+            onSvgClicked({ clientX: t.clientX, clientY: t.clientY });
+            return;
+        }
         if (distance < 64) return;
+        const angle = Math.abs(Math.atan2(stopY - startY, stopX - startX));
         const angleUpperBound = Math.PI * 0.25 * 0.5;
         const swipeRight = angle < angleUpperBound;
         if (swipeRight === false && angle < Math.PI - angleUpperBound) return;
-        if (ev.cancelable) ev.preventDefault();
         if (swipeRight === false) {
             if (hostEl.classList.contains('paused')) hostEl.classList.remove('hide');
             return;
@@ -1308,8 +1315,9 @@ const startPicker = function() {
     self.addEventListener('resize', onViewportChanged, { passive: true });
 
     svgRoot.addEventListener('click', onSvgClicked);
-    svgRoot.addEventListener('touchstart', onSvgTouch, { passive: true });
-    svgRoot.addEventListener('touchend', onSvgTouch);
+    svgRoot.addEventListener('touchstart', onSvgTouch, { passive: false });
+    svgRoot.addEventListener('touchend', onSvgTouch, { passive: false });
+    svgRoot.addEventListener('touchcancel', onSvgTouch, { passive: false });
 
     $('#quit').addEventListener('click', onQuitClicked);
     $('#preview').addEventListener('click', onPreviewClicked);
