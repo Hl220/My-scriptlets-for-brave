@@ -263,7 +263,7 @@ ul { margin: 6px 0 0; padding: 0; list-style-type: none; text-align: left; overf
 #candidateFilters .changeFilter li.active { border: 1px dotted rgb(0 96 223); }
 #candidateFilters .changeFilter li:hover { background-color: var(--surface-2); }
 
-svg#sea { cursor: crosshair; box-sizing: border-box; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: auto; touch-action: none; }
+svg#sea { cursor: crosshair; box-sizing: border-box; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: auto; touch-action: pan-y; }
 :host(.paused) svg#sea { cursor: not-allowed; }
 svg#sea > path:first-child { fill: rgba(0,0,0,.5); fill-rule: evenodd; }
 svg#sea > path + path { stroke: #f00; stroke-width: .5px; fill: rgba(255,63,63,.20); }
@@ -1122,17 +1122,16 @@ const onSvgTouch = (function() {
             startX = ev.touches[0].screenX;
             startY = ev.touches[0].screenY;
             tracking = true;
-            ev.preventDefault();
             return;
         }
         if (ev.type === 'touchcancel') { tracking = false; return; }
         if (tracking === false) return;
         tracking = false;
-        ev.preventDefault();
         const t = ev.changedTouches[0];
         const stopX = t.screenX, stopY = t.screenY;
         const distance = Math.hypot(stopX - startX, stopY - startY);
         if (distance < 24) {
+            if (ev.cancelable) ev.preventDefault();
             onSvgClicked({ clientX: t.clientX, clientY: t.clientY });
             return;
         }
@@ -1141,6 +1140,7 @@ const onSvgTouch = (function() {
         const angleUpperBound = Math.PI * 0.25 * 0.5;
         const swipeRight = angle < angleUpperBound;
         if (swipeRight === false && angle < Math.PI - angleUpperBound) return;
+        if (ev.cancelable) ev.preventDefault();
         if (swipeRight === false) {
             if (hostEl.classList.contains('paused')) hostEl.classList.remove('hide');
             return;
@@ -1315,9 +1315,9 @@ const startPicker = function() {
     self.addEventListener('resize', onViewportChanged, { passive: true });
 
     svgRoot.addEventListener('click', onSvgClicked);
-    svgRoot.addEventListener('touchstart', onSvgTouch, { passive: false });
+    svgRoot.addEventListener('touchstart', onSvgTouch, { passive: true });
     svgRoot.addEventListener('touchend', onSvgTouch, { passive: false });
-    svgRoot.addEventListener('touchcancel', onSvgTouch, { passive: false });
+    svgRoot.addEventListener('touchcancel', onSvgTouch, { passive: true });
 
     $('#quit').addEventListener('click', onQuitClicked);
     $('#preview').addEventListener('click', onPreviewClicked);
