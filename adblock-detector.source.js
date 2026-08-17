@@ -26,7 +26,7 @@
   // ---------------------------------------------------------------------
   const SIGNATURES = {
     'Anti-adblock detection': [
-      { name: 'Code Help Pro / "chp-ads-block-detector" (WP plugin)', re: /chp-ads-block-detector/i, severity: 3 },
+      { name: 'Code Help Pro / "chp-ads-block-detector" (WP plugin)', re: /["'(]([^"')]*chp-ads-block-detector[^"')]*)["')]/i, severity: 3 },
       { name: 'BlockAdBlock / FuckAdBlock library', re: /\b(fuckadblock|blockadblock|block_adblock)\b/i, severity: 3 },
       { name: 'Generic "adblock detect(or)" script/class', re: /adblock[-_]?detect(or)?/i, severity: 2 },
       { name: 'Sourcepoint anti-adblock / consent wall', re: /sourcepoint|sp_message_container|sp-prod\.net|msg\.sp-tag\.com/i, severity: 2 },
@@ -66,6 +66,13 @@
   const SUSPICIOUS_STORAGE_KEY_RE = /^(pu_|_pop|popns|zoneid|smartpop|ysmm)/i;
   const SAFE_IFRAME_HOST_RE = /google\.com|gstatic\.com|recaptcha|doubleclick\.net\/pagead|facebook\.com\/tr|googletagmanager\.com/i;
 
+  // Unique fingerprint embedded in this tool's own source. If you host this
+  // script (jsdelivr, a userscript, a <script src> loader, etc.) it will
+  // otherwise legitimately match its own "adblock-detect" style signatures -
+  // the file IS about detecting adblock-detectors. Any source containing
+  // this exact marker is excluded from scanning before signatures run.
+  const SELF_MARKER = '__ADSCAN_SELF_' + 'f21x9k' + '__';
+
   // ---------------------------------------------------------------------
   // 2. GATHER SOURCES  (this is the "view-source:" replacement)
   //    view-source: URLs can't be opened/fetched from injected JS, so
@@ -101,7 +108,7 @@
     }
 
     sources.push({ label: 'document head (meta tags)', url: null, text: document.head.innerHTML });
-    return sources;
+    return sources.filter((s) => s.text.indexOf(SELF_MARKER) === -1);
   }
 
   // ---------------------------------------------------------------------
@@ -122,7 +129,7 @@
             category,
             name: sig.name,
             severity: sig.severity,
-            evidence: m[0].slice(0, 140),
+            evidence: (m[1] || m[0]).slice(0, 140),
             from: src.url || src.label,
           });
         }
@@ -162,13 +169,66 @@
     catch (e) { return false; }
   }
 
+  const DOMAIN_LIKE_RE = /^[a-z0-9.-]+\.[a-z]{2,}$/i;
+
+  // Derives a folder-scoped rule for first-party matches that came with a
+  // real asset path (e.g. a plugin's own JS/img folder) instead of ever
+  // blocking the whole site. Heuristic: keep everything up to the last
+  // "/" in the matched path, wildcard the rest.
+  function firstPartyPathRule(pageHost, evidence) {
+    if (!evidence) return null;
+    let path = evidence.replace(/^https?:\/\/[^/]+/i, '');
+    if (path.charAt(0) !== '/') return null;
+    const dir = path.slice(0, path.lastIndexOf('/'));
+    return dir ? '||' + pageHost + dir + '/*' : null;
+  }
+
+  // Builds uBlock Origin / AdGuard-syntax rules, split into three honest
+  // tiers instead of one blunt domain list:
+  //   1. Confirmed third-party ad/tracker domains -> safe to block outright.
+  //   2. First-party matches with a derivable asset path -> folder-scoped
+  //      block (kills the script, leaves the rest of the site alone).
+  //   3. First-party matches with no blockable resource (e.g. a bare meta
+  //      tag) -> informational only; these need a cosmetic/annoyance-list
+  //      fix, not a network rule.
   function toFilterRules(findings) {
-    const domains = new Set();
+    const pageHost = location.hostname;
+    const domainRules = new Set();
+    const pathRules = new Set();
+    const infoOnly = [];
+
     findings.forEach((f) => {
-      if (!f.from) return;
-      try { domains.add(new URL(f.from).hostname); } catch (e) { /* not a URL */ }
+      const evidenceIsDomain = DOMAIN_LIKE_RE.test(f.evidence) && f.evidence.toLowerCase() !== pageHost.toLowerCase();
+      if (evidenceIsDomain) { domainRules.add(f.evidence.toLowerCase()); return; }
+
+      let sourceHost = null;
+      if (f.from) { try { sourceHost = new URL(f.from).hostname; } catch (e) {} }
+
+      if (sourceHost && sourceHost !== pageHost) { domainRules.add(sourceHost); return; }
+
+      const pathRule = firstPartyPathRule(pageHost, f.evidence);
+      if (pathRule) { pathRules.add(pathRule); return; }
+
+      infoOnly.push(f);
     });
-    return Array.from(domains).map((d) => '||' + d + '^').join('\n');
+
+    const lines = [];
+    if (domainRules.size) {
+      lines.push('! Third-party ad/tracker domains - safe to block, does not affect ' + pageHost);
+      Array.from(domainRules).sort().forEach((d) => lines.push('||' + d + '^'));
+    }
+    if (pathRules.size) {
+      lines.push('');
+      lines.push('! First-party assets on ' + pageHost + ' - folder-scoped, review before using');
+      Array.from(pathRules).sort().forEach((r) => lines.push(r));
+    }
+    if (infoOnly.length) {
+      lines.push('');
+      lines.push('! Informational only - no blockable network resource, page would break if ' + pageHost + ' were blocked.');
+      lines.push('! Enable "Adblock Warning Removal List" (Annoyances) in your ad blocker for these instead:');
+      infoOnly.forEach((f) => lines.push('!  - ' + f.name));
+    }
+    return lines.join('\n') || '! No blockable third-party domains found in this scan.';
   }
 
   // ---------------------------------------------------------------------
