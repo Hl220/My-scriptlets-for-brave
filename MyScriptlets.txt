@@ -64,12 +64,12 @@ telegold.goldapk.app##.ads-header, .ads-inline, .ads-footer, .ads-mobile, .ad-co
 
 
 !--------------------------------------------------------------------------------------!
-! Taken From uBlockOrigin Maintained Filters Lists To Suit My Needs
+! Taken From uBlockOrigin's Own Maintained Filters Lists To Suit My Needs
 !--------------------------------------------------------------------------------------!
 
 
 ! https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/filters-general.txt
-! Specific For html-load And error reports (Anti-adblock Detectirs)
+! Specific For html-load And error reports (Anti-adblock Detectors)
 !-------------------------------------------
 dcdirtylaundry.com,ipatriot.com,newser.com##+js(aost, Math, onerror)
 designbump.com,thedesigninspiration.com##+js(aost, Math.random, /(?=.*onerror)(?=^(?!.*(https)))/)
