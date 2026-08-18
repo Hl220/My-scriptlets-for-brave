@@ -6,6 +6,11 @@
 ! Version: 1.0.0
 
 
+!--------------------------------------------------------------------------------------!
+! Taken From Some Reddit Users And some Created By Me
+!--------------------------------------------------------------------------------------!
+
+
 !-------------------------------------------
 ! LibertyCity Ads Block Rule
 libertycity.*##div.banner_in_news
@@ -31,9 +36,9 @@ google.*##div.MjjYud:has-text(/People also ask|People also search for|أسئلة
 ! html-load And error reports
 !gamesradar.com##^script:has-text(html-load.com)
 !gamesradar.com##+js(rmnt, script, html-load.com)
-scribd.com##+js(rmnt, script, /\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
-scribd.com##^script:has-text(/\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
-scribd.com##^script[data-cfasync="false"][nowprocket]
+!scribd.com##+js(rmnt, script, /\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
+!scribd.com##^script:has-text(/\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
+!scribd.com##^script[data-cfasync="false"][nowprocket]
 !-------------------------------------------
 ! Reddit Auto Translate
 ||reddit.com^$removeparam=tl
@@ -46,9 +51,25 @@ reddit.com##+js(prevent-addEventListener, touchmove)
 reddit.com###answers-suggested-queries
 reddit.com##.bg-neutral-background.border-solid.border-0.border-b-sm.border-neutral-border-weak.pt-xs
 !-------------------------------------------
+! Anti-Adblock Specific
+go.zovo.ink##+js(set-constant, app_vars.force_disable_adblock, "0")
+go.zovo.ink##.text-left
+go.zovo.ink##footer
+!-------------------------------------------
+! Abu Arab - Block popunder Ads
+telegold.goldapk.app##+js(set, adsbygoogle, [])
+! Abu Arab - Hide all Google AdSense 
+telegold.goldapk.app##.ads-header, .ads-inline, .ads-footer, .ads-mobile, .ad-container
+!-------------------------------------------
 
 
-! Specific For html-load And error reports
+!--------------------------------------------------------------------------------------!
+! Taken From uBlockOrigin Maintained Filters Lists To Suit My Needs
+!--------------------------------------------------------------------------------------!
+
+
+! https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/filters-general.txt
+! Specific For html-load And error reports (Anti-adblock Detectirs)
 !-------------------------------------------
 dcdirtylaundry.com,ipatriot.com,newser.com##+js(aost, Math, onerror)
 designbump.com,thedesigninspiration.com##+js(aost, Math.random, /(?=.*onerror)(?=^(?!.*(https)))/)
