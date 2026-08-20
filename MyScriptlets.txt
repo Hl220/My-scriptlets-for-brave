@@ -23,12 +23,6 @@ google.*##.YzCcne:not([jscontroller])
 ! Google others Block Rule
 google.*##div.MjjYud:has-text(/People also ask|People also search for|أسئلة أخرى|تم البحث أيضًا عن/)
 !-------------------------------------------
-! False Positive Website
-!@@||dodi-repacks.*^
-!@@||fitgirl-repacks.site^
-!@@||maximoff.su^
-!@@||vik1ngfile.site^
-!------------------------------------------
 ! Turtlecute Test For 100%
 !pagead.js$domain=adblock.turtlecute.*
 !widget/ads.
@@ -36,9 +30,6 @@ google.*##div.MjjYud:has-text(/People also ask|People also search for|أسئلة
 ! html-load And error reports
 !gamesradar.com##^script:has-text(html-load.com)
 !gamesradar.com##+js(rmnt, script, html-load.com)
-!scribd.com##+js(rmnt, script, /\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
-!scribd.com##^script:has-text(/\(async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*(const|var)/)
-!scribd.com##^script[data-cfasync="false"][nowprocket]
 !-------------------------------------------
 ! Reddit Auto Translate
 ||reddit.com^$removeparam=tl
@@ -49,9 +40,26 @@ reddit.com###xpromo-bottom-sheet
 reddit.com##+js(rc, scroll-is-blocked, body, stay)
 reddit.com##+js(prevent-addEventListener, touchmove)
 !-------------------------------------------
-! Anti-Adblock Specific
-go.zovo.ink##+js(set-constant, app_vars.force_disable_adblock, "0")
+! Abu Arabs Specific
+! 3ssem.gold - Popunder
+||styletsbarling.com^$3p
+! 3ssem.download - Popunder
+! watzaps.com - Popunder
+||deisinkamis.com^$3p
+! watzaps.app - Popunder
+||punkierdetruck.com^$3p
+! goldapk.app - Popunder
+||pl.vizzycurted.com^$3p
+! ogwhats - Popunder
+||dimmingtumming.com^$3p
 !-------------------------------------------
+! Anti-Adblock Detector
+! go.zovo.ink - Popunder
+go.zovo.ink##+js(addEventListener-defuser, click)
+! go.zovo.ink - Bypass Adblock Detector
+go.zovo.ink##+js(set-constant, app_vars.force_disable_adblock, '0')
+!-------------------------------------------
+
 
 
 
